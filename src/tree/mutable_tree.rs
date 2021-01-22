@@ -14,29 +14,41 @@ pub struct MutableTreeNode {
     pub next_sibling: Option<TreeIndex>,
     pub previous_sibling: Option<TreeIndex>,
     pub branch_length: Option<f64>,
+    pub number:usize
 }
 
 impl MutableTreeNode {
     pub fn new(taxon: Option<String>,
-               parent: Option<TreeIndex>) -> Self {
-        MutableTreeNode { taxon: taxon, parent: parent, first_child: None, next_sibling: None, previous_sibling: None, branch_length: None }
+               parent: Option<TreeIndex>,
+                number:usize) -> Self {
+        MutableTreeNode { taxon: taxon, parent: parent, first_child: None, next_sibling: None, previous_sibling: None, branch_length: None,number }
     }
 }
 
 pub struct MutableTree {
     pub nodes: Vec<Option<MutableTreeNode>>,
+    pub external_nodes:Vec<Option<TreeIndex>>,
+    pub interal_nodes:Vec<Option<TreeIndex>>,
     root: Option<TreeIndex>,
 
 }
 
 impl MutableTree {
-    pub fn new() -> Self {
-        MutableTree {
+    pub fn new(root:FixedNode)->Self{
+       tree= MutableTree {
             nodes: Vec::new(),
+            external_nodes:Vec::new(),
+            interal_nodes:Vec::new(),
             root: None,
+
+        };
+
+
+        for node in root.iter(){
+
         }
-    }
-    pub fn from_fixed_node(root:FixedNode){
+
+        return tree
 
     }
 
@@ -46,7 +58,8 @@ impl MutableTree {
     pub fn set_root(&mut self, root: Option<TreeIndex>) {
         self.root = root
     }
-    pub fn add_node(&mut self, node: MutableTreeNode) -> TreeIndex {
+    //TODO split out number
+    fn add_node(&mut self, node: MutableTreeNode) -> TreeIndex {
         let index = self.nodes.len();
         self.nodes.push(Some(node));
         let child = self.node_at(index).expect("no way we hit this");
@@ -55,10 +68,21 @@ impl MutableTree {
         }
         return index;
     }
+    fn add_tip(&mut self, node: MutableTreeNode)->TreeIndex{
+        let index = self.add_node(node);
+        self.external_nodes.push(Some(index));
+        return index;
+    }
+
+    fn add_internal_node(&mut self, node: MutableTreeNode)->TreeIndex{
+        let index = self.add_node(node);
+        self.interal_nodes.push(Some(index));
+        return index;
+    }
+
 
     pub fn add_child(&mut self, parent: TreeIndex, child: TreeIndex) {
         let mut children = self.get_children(parent);
-
         if let Some(last_child) = children.pop() {
             let sibling = self.node_at_mut(last_child).expect("sibling not tree");
             sibling.next_sibling = Some(child);
@@ -76,6 +100,7 @@ impl MutableTree {
     pub fn remove_node_at(&mut self, index: TreeIndex) -> Option<MutableTreeNode> {
         if let Some(node) = self.nodes.get_mut(index) {
             node.take()
+            //TODO remove from external node list and or internal node list
         } else {
             None
         }

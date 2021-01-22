@@ -9,14 +9,27 @@ inner={!("\'")~ANY}
 quoted_name = {"'" ~ inner* ~ "'" }
 name = @{(quoted_name|unquoted_name)}
 
-leaf = @{name}
+leaf = @{name?}
 
 branch= {subtree ~ length?}
 
-subtree = {leaf | internal}
-//TODO add label and support for name
+subtree = {internal|leaf}
 internal = {"("~branchset ~")"~name?}
 
 branchset = { (branch ~ "," ~ branchset) | branch}
 
 tree = {subtree ~ ";" | branch ~ ";" }
+
+//TODO add label and support for name in parser rules
+
+label = {continuous| name }
+node_annotation={"[&"~(annotation)+~"]"}
+annotation = {key+~"="~value+}
+key={!("="|":")~ANY+}
+value = {continuous|set|discrete}
+continuous = {(ASCII_DIGIT | "." | "-")+}
+discrete = @{name}
+one_entry={key~":"~continuous|discrete}
+set={one_entry~","~set | one_entry}
+annotation_set = {annotation~","~annotation_set | annotation}
+
