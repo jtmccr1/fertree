@@ -1,0 +1,22 @@
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+
+// grammar rules from https://en.wikipedia.org/wiki/Newick_format
+branchlength = {(ASCII_DIGIT | "." | "-")+}
+length = {":" ~ branchlength+}
+valid_name_char = {!( "("|")"|"["|"]"|"{"|"}"|","| ";" | ":"| WHITE_SPACE| "\'" ) ~ ANY}
+unquoted_name ={valid_name_char+}
+inner={!("\'")~ANY}
+quoted_name = {"'" ~ inner* ~ "'" }
+name = @{(quoted_name|unquoted_name)}
+
+leaf = @{name}
+
+branch= {subtree ~ length?}
+
+subtree = {leaf | internal}
+//TODO add label and support for name
+internal = {"("~branchset ~")"~name?}
+
+branchset = { (branch ~ "," ~ branchset) | branch}
+
+tree = {subtree ~ ";" | branch ~ ";" }
