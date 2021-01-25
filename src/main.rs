@@ -52,12 +52,12 @@ fn main() {
     //     }
     // }
 
-    let mut tree = MutableTree::new();
-    let e = tree.add_node(MutableTreeNode::new(Some("a".to_string()), None));
-    let d = tree.add_node(MutableTreeNode::new(Some("a".to_string()), Some(e)));
-    let c = tree.add_node(MutableTreeNode::new(Some("a".to_string()), Some(e)));
-    let a = tree.add_node(MutableTreeNode::new(Some("a".to_string()), Some(d)));
-    let b = tree.add_node(MutableTreeNode::new(Some("a".to_string()), Some(d)));
+    let mut tree = Tree::new();
+    let e = tree.add_node(TreeNode::new(Some("a".to_string()), None));
+    let d = tree.add_node(TreeNode::new(Some("a".to_string()), Some(e)));
+    let c = tree.add_node(TreeNode::new(Some("a".to_string()), Some(e)));
+    let a = tree.add_node(TreeNode::new(Some("a".to_string()), Some(d)));
+    let b = tree.add_node(TreeNode::new(Some("a".to_string()), Some(d)));
 
     tree.set_root(Some(e));
     let mut preorder = tree.iter();

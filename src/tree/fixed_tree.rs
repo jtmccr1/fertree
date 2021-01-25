@@ -1,9 +1,13 @@
+use std::collections::HashMap;
+use crate::parsers::newick_parser::AnnotationValue;
+
 #[derive(Debug)]
 pub struct FixedNode {
     pub children: Vec<Box<FixedNode>>,
     pub label: Option<String>,
     pub taxon: Option<String>,
     pub length: Option<f64>,
+    pub annotations: Option<HashMap<String,AnnotationValue>>
 }
 
 
@@ -14,20 +18,21 @@ impl FixedNode {
             label: None,
             taxon: None,
             length: None,
+            annotations: None
         }
     }
 
     pub fn iter(&self) -> PreorderIter {
-        PreorderIter::new(self.as_ref())
+        PreorderIter::new(&self)
     }
 }
 
-struct PreorderIter<'a> {
+pub struct PreorderIter<'a> {
     stack: Vec<&'a FixedNode>
 }
 
 impl<'a> PreorderIter<'a> {
-    fn new(node: &FixedNode) -> Self {
+    fn new(node: &'a FixedNode) -> Self {
         PreorderIter { stack: vec![node] }
     }
 }

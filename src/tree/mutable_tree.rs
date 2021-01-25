@@ -1,11 +1,14 @@
 use std::path::Iter;
-use std::collections::{HashMap, HashSet};
-use std::sync::mpsc::channel;
 use std::option::Option;
 use super::fixed_tree::FixedNode;
 
 pub type TreeIndex = usize;
 
+
+pub struct MutableTreeNodeReference {
+    taxon: Option<String>,
+    parent: Option<TreeIndex>,
+}
 
 pub struct MutableTreeNode {
     pub taxon: Option<String>,
@@ -18,7 +21,7 @@ pub struct MutableTreeNode {
 }
 
 impl MutableTreeNode {
-    pub fn new(taxon: Option<String>,
+    fn new(taxon: Option<String>,
                parent: Option<TreeIndex>,
                 number:usize) -> Self {
         MutableTreeNode { taxon: taxon, parent: parent, first_child: None, next_sibling: None, previous_sibling: None, branch_length: None,number }
@@ -35,29 +38,32 @@ pub struct MutableTree {
 
 impl MutableTree {
     pub fn new(root:FixedNode)->Self{
-       tree= MutableTree {
+       let mut tree = MutableTree {
             nodes: Vec::new(),
             external_nodes:Vec::new(),
             interal_nodes:Vec::new(),
             root: None,
-
         };
 
-
-        for node in root.iter(){
-
-        }
-
+        tree.new_helper(root, None);
+        tree.set_root(Some(0));
         return tree
 
     }
-
+    fn new_helper(&mut self, node:FixedNode,parent:Option<TreeIndex>){
+        let index = self.nodes.len();
+        self.add_node(MutableTreeNode::new(node.taxon,parent,index));
+        for child in node.children{
+            self.new_helper(*child, Some(index));
+        }
+    }
     pub fn iter(&self) -> PreorderIter {
         PreorderIter::new(self.root)
     }
     pub fn set_root(&mut self, root: Option<TreeIndex>) {
         self.root = root
     }
+
     //TODO split out number
     fn add_node(&mut self, node: MutableTreeNode) -> TreeIndex {
         let index = self.nodes.len();

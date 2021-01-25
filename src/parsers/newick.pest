@@ -1,17 +1,21 @@
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 
 // grammar rules from https://en.wikipedia.org/wiki/Newick_format
-branchlength = {(ASCII_DIGIT | "." | "-")+}
-length = {":" ~ branchlength+}
-valid_name_char = {!( "("|")"|"["|"]"|"{"|"}"|","| ";" | ":"| WHITE_SPACE| "\'" ) ~ ANY}
+
+numeric = {"-"? ~ (ASCII_DIGIT | ".")+ ~ ("e" ~"-"? ~(ASCII_DIGIT | ".")+)? }
+branchlength = {(ASCII_DIGIT | "." | "-"|^"e")+}
+// branchlength = @{numeric}
+
+length = {":" ~ branchlength}
+valid_name_char = {!( "="|"("|")"|"["|"]"|"{"|"}"|","| ";" | ":"| WHITE_SPACE| "\'" ) ~ ANY}
 unquoted_name ={valid_name_char+}
 inner={!("\'")~ANY}
-quoted_name = {"'" ~ inner* ~ "'" }
+quoted_name = {"'" ~ inner+ ~ "'" }
 name = @{(quoted_name|unquoted_name)}
 
 leaf = @{name?}
 
-branch= {subtree ~ length?}
+branch= {subtree ~node_annotation? ~length?}
 
 subtree = {internal|leaf}
 internal = {"("~branchset ~")"~name?}
@@ -23,13 +27,13 @@ tree = {subtree ~ ";" | branch ~ ";" }
 //TODO add label and support for name in parser rules
 
 label = {continuous| name }
-node_annotation={"[&"~(annotation)+~"]"}
-annotation = {key+~"="~value+}
-key={!("="|":")~ANY+}
+node_annotation={"[&"~annotation_set~"]"}
+annotation = {key~"="~value}
+key=@{name}
 value = {continuous|set|discrete}
-continuous = {(ASCII_DIGIT | "." | "-")+}
+continuous = {(ASCII_DIGIT | "." | "-"|^"e")+}
 discrete = @{name}
-one_entry={key~":"~continuous|discrete}
-set={one_entry~","~set | one_entry}
-annotation_set = {annotation~","~annotation_set | annotation}
+one_entry={continuous|discrete}
+set={"{" ~one_entry ~ (","~one_entry)* ~"}"}
+annotation_set = {(annotation~","~annotation_set) | annotation}
 
