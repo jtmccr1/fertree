@@ -2,11 +2,10 @@ mod commands;
 
 use std::{io, path};
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read};
-use rebl::tree::mutable_tree::{MutableTree, MutableTreeNode};
+use std::io::{BufRead, BufReader};
+use rebl::tree::mutable_tree::{MutableTree};
 use rebl::parsers::newick_parser::NewickParser;
 use structopt::StructOpt;
-use rebl::tree::fixed_tree::FixedNode;
 
 #[derive(Debug, StructOpt)]
 #[structopt(about = "command line tools for processing phylogenetic trees in rust")]
@@ -58,22 +57,23 @@ fn main() {
                     println!("nodes\tinternal\ttips\tsumbl");
 
                     for tree in trees.iter(){
-                        let mut nodes =tree.nodes.len();
-                        let mut internal=tree.internal_nodes.len();
+                        let  nodes =tree.nodes.len();
+                        let  internal=tree.internal_nodes.len();
                         let mut bl =0.0;
-                        let mut tips =tree.external_nodes.len();
+                        let  tips =tree.external_nodes.len();
                         let mut preorder = tree.iter();
-
-                        while let Some(nodeRef) = preorder.next(tree) {
-                            println!("{}",nodeRef);
-                            if let Some(node) = tree.get_node(nodeRef) {
+                        let mut visited_node = 0;
+                        while let Some(node_ref) = preorder.next(tree) {
+                            if let Some(node) = tree.get_node(node_ref) {
                                 if let Some(length) = node.length {
                                     bl += length;
                                 }
+                                visited_node +=1;
                             }
                         }
                         println!("{:?}", tree.get_node(2));
-                        println!("{}\t{}\t{}\t{}", nodes,internal,tips,bl)
+                        println!("{}\t{}\t{}\t{}", nodes,internal,tips,bl);
+                        println!("{}", visited_node)
                     }
                 }
 
@@ -104,7 +104,7 @@ fn parse_input(input: Option<path::PathBuf>)  -> Result<Vec<MutableTree>,io::Err
         None => {
             println!("no file");
             let stdin = io::stdin();
-            let mut handel = stdin.lock();
+            let  handel = stdin.lock();
             for line in handel.lines() {
                 if let Ok(tree)=NewickParser::parse_tree(&*line?){
                     trees.push(tree);
