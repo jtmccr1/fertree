@@ -55,13 +55,19 @@ impl MutableTree {
     }
     fn new_helper(&mut self, node: FixedNode, parent:Option<TreeIndex>){
         let index = self.nodes.len();
-        self.add_node(MutableTreeNode::new(node.taxon,parent,Some(index)));
+        let new_node =MutableTreeNode::new(node.taxon,parent,Some(index));
+        self.nodes.push(Some(new_node));
         self.node_annotations.push(node.annotations);
+
         if node.children.len()>0{
             self.internal_nodes.push(Some(index));
         }else{
             self.external_nodes.push(Some(index));
         }
+        if let Some(p) = parent{
+            self.add_child(p,index);
+        }
+
         for child in node.children{
             self.new_helper(*child, Some(index));
         }
@@ -75,7 +81,6 @@ impl MutableTree {
 
     fn add_node(&mut self, node: MutableTreeNode) -> TreeIndex {
         let index = self.nodes.len();
-        self.nodes.push(Some(node));
         let child = self.get_node(index).expect("no way we hit this");
         if let Some(parent) = child.parent {
             self.add_child(parent, index);
