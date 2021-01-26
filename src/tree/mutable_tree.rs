@@ -167,18 +167,49 @@ impl MutableTree {
         return self.get_node_mut(index).expect("node not in tree")
     }
 
-    pub fn get_children(&self, index: TreeIndex) -> Vec<TreeIndex> {
-        let mut children = Vec::new();
-        let  node = self.get_unwrapped_node(index);
-        if let Some(fist_child) = node.first_child {
-            children.push(fist_child);
-            let mut child = self.get_node(fist_child).expect("Node not in tree");
-            while let Some(sibling) = child.next_sibling {
-                children.push(sibling);
-                child = self.get_node(sibling).expect("expected sibling node to be in the tree");
+    pub fn get_num_children(&mut self, node_ref:TreeIndex) ->TreeIndex{
+        let mut count = 0;
+        let parent_node = self.get_unwrapped_node(node_ref);
+        if let Some(first_child)=parent_node.first_child{
+            let  mut sibling_node = self.get_unwrapped_node_mut(first_child);
+            while let Some(sibling) = sibling_node.next_sibling {
+                 sibling_node = self.get_unwrapped_node_mut(sibling);
+                count+=1;
             }
         }
-        return children;
+        return count;
+    }
+    pub fn get_child(&mut self, node_ref:TreeIndex, index:usize) ->Option<TreeIndex>{
+        let mut count = 0;
+        let parent_node = self.get_unwrapped_node(node_ref);
+        if let Some(first_child)=parent_node.first_child{
+            if index==0 {
+                return Some(first_child);
+            }
+            let  mut sibling_node = self.get_unwrapped_node_mut(first_child);
+            while let Some(sibling) = sibling_node.next_sibling {
+                sibling_node = self.get_unwrapped_node_mut(sibling);
+                count+=1;
+                if count==index{
+                    return Some(sibling);
+                }
+            }
+        }
+        return None;
+    }
+    pub fn get_next_sibling(&self,index:TreeIndex)->Option<TreeIndex>{
+        let node = self.get_unwrapped_node(index);
+        if let Some(sib)=node.next_sibling{
+            return Some(sib);
+        }
+        return None;
+    }
+    pub fn get_previous_sibling(&self,index:TreeIndex)->Option<TreeIndex>{
+        let node = self.get_unwrapped_node(index);
+        if let Some(sib)=node.previous_sibling{
+            return Some(sib);
+        }
+        return None;
     }
     pub fn set_length(&mut self, index: TreeIndex, bl: f64) {
         let node = self.get_node_mut(index).expect("node not in tree");
@@ -191,6 +222,11 @@ impl MutableTree {
             None
         }
     }
+    pub fn get_annotation_keys(&self, index:TreeIndex) {
+        return if let Some(annotation) = self.node_annotations[index].as_ref() {
+            annotation.keys();
+        }
+    }
     pub fn get_root(&self)->Option<TreeIndex>{
         self.root
     }
@@ -198,6 +234,8 @@ impl MutableTree {
         let possible_annotation = self.node_annotations[index].as_mut();
         if let Some(annotation)=possible_annotation{
                 annotation.insert(key, value);
+            //TODO add annotation types to tree and check that it's the same here
+            //TODO provide iterator over annotation names
         }else{
            println!("node not found");
         }
