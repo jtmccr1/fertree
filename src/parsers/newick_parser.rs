@@ -1,6 +1,9 @@
+// Needed by pest
 use pest_consume::{match_nodes, Error, Parser};
 use super::super::tree::fixed_tree::FixedNode;
 use std::collections::HashMap;
+use crate::tree::mutable_tree::MutableTree;
+
 
 #[derive(Parser)]
 #[grammar = "./parsers/newick.pest"]
@@ -45,8 +48,6 @@ impl NewickParser {
         Ok(tip)
     }
     fn branch(input: Node) -> Result<FixedNode> {
-        let mut node: Option<FixedNode> = None;
-//TODO don't need repetition
         Ok(match_nodes!(input.into_children();
             [subtree(mut n),node_annotation(a),length(l)]=>{
             n.length=Some(l);
@@ -183,21 +184,25 @@ impl NewickParser {
 }
 
 impl NewickParser {
-    pub fn parse_tree(str: &str) -> Result<FixedNode> {
+    pub fn parse_tree(str: &str) -> Result<MutableTree> {
+        let start = std::time::Instant::now();
         let inputs = NewickParser::parse(Rule::tree, str).unwrap();
+        println!("It took {} ms to parse the file", start.elapsed().as_millis());
 // There should be a single root node in the parsed tree
         let input = inputs.single().unwrap();
 // Consume the `Node` recursively into the final value
-        NewickParser::tree(input)
+        println!("processing pest rules");
+        let root = NewickParser::tree(input)?;
+        let start = std::time::Instant::now();
+        let tree= MutableTree::new(root);
+        println!("It took {} ms to convert to tree", start.elapsed().as_millis());
+        Ok(tree)
     }
-
 }
-
 
 #[cfg(test)]
 mod tests {
-    use crate::parsers::newick_parser::{NewickParser, AnnotationValue};
-    use crate::tree::fixed_tree::FixedNode;
+    use crate::parsers::newick_parser::{NewickParser};
 
     #[test]
     fn it_works() {
@@ -264,6 +269,12 @@ mod tests {
     fn annotation(){
         NewickParser::parse_tree("(a[&test=ok],b:1);");
     }
+
+    #[test]
+    fn whitespace(){
+        NewickParser::parse_tree("  (a[&test=ok],b:1);\t");
+    }
+
     #[test]
     #[should_panic]
     fn should_error() {

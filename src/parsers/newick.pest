@@ -22,7 +22,7 @@ internal = {"("~branchset ~")"~name?}
 
 branchset = { (branch ~ "," ~ branchset) | branch}
 
-tree = {subtree ~ ";" | branch ~ ";" }
+tree = { WHITE_SPACE*~(subtree ~ ";" | branch ~ ";")~WHITE_SPACE* }
 
 //TODO add label and support for name in parser rules
 

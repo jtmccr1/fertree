@@ -21,7 +21,6 @@ impl FixedNode {
             annotations: None
         }
     }
-
     pub fn iter(&self) -> PreorderIter {
         PreorderIter::new(&self)
     }
