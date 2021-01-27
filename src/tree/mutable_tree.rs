@@ -112,17 +112,17 @@ impl MutableTree {
 
     fn tree_helper(&mut self, tree: &mut MutableTree, node: TreeIndex, taxa: &HashSet<String>) -> Option<TreeIndex> {
         let mut new_node = None;
-        if tree.get_num_children(node) == 0 {
+        if tree.get_num_children(&node) == 0 {
             //make external node
             if let Some(taxon) = &tree.get_unwrapped_node(&node).taxon {
                 new_node = self.make_external_node(taxon, &taxa);
             }
         } else {
-            let nchildren = tree.get_num_children(node);
+            let nchildren = tree.get_num_children(&node);
             let mut children: Vec<usize> = vec![];
             let mut visited = 0;
             while visited < nchildren {
-                let child = tree.get_child(node, visited);
+                let child = tree.get_child(&node, visited);
                 if let Some(child_node) = child {
                     let new_child = self.tree_helper(tree, child_node, taxa);
                     if let Some(new_child_index) = new_child {
@@ -321,7 +321,7 @@ impl MutableTree {
         self.external_nodes.len()
     }
 
-    pub fn get_num_children(&self, node_ref: TreeIndex) -> TreeIndex {
+    pub fn get_num_children(&self, node_ref: &TreeIndex) -> TreeIndex {
         let mut count = 0;
         let parent_node = self.get_unwrapped_node(&node_ref);
         if let Some(first_child) = parent_node.first_child {
@@ -337,7 +337,7 @@ impl MutableTree {
         }
         return count;
     }
-    pub fn get_child(&self, node_ref: TreeIndex, index: usize) -> Option<TreeIndex> {
+    pub fn get_child(&self, node_ref: &TreeIndex, index: usize) -> Option<TreeIndex> {
         let mut count = 0;
         let parent_node = self.get_unwrapped_node(&node_ref);
         if let Some(first_child) = parent_node.first_child {
