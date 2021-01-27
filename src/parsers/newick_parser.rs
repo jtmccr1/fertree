@@ -12,13 +12,12 @@ pub struct NewickParser;
 type Result<T> = std::result::Result<T, Error<Rule>>;
 type Node<'i> = pest_consume::Node<'i, Rule, ()>;
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub enum AnnotationValue{
     Discrete(String),
     Continuous(f64),
     Set(Vec<AnnotationValue>)
 }
-
 
 #[pest_consume::parser]
 impl NewickParser {
@@ -194,7 +193,7 @@ impl NewickParser {
         println!("processing pest rules");
         let root = NewickParser::tree(input)?;
         let start = std::time::Instant::now();
-        let tree= MutableTree::new(root);
+        let tree= MutableTree::from_fixed_node(root);
         println!("It took {} ms to convert to tree", start.elapsed().as_millis());
         Ok(tree)
     }
@@ -228,21 +227,7 @@ mod tests {
         assert_eq!(bl,vec![5.0,1.0,4.0]);
     }
 
-    #[test]
-    fn no_labels(){
-        let root = NewickParser::parse_tree("(:1,:4):5;").unwrap();
 
-        let mut bl = vec![];
-        if let Some(l) = root.length{
-            bl.push(l);
-        }
-        for child in root.children.iter(){
-            if let Some(t)=child.length{
-                bl.push(t)
-            }
-        }
-        assert_eq!(bl,vec![5.0,1.0,4.0]);
-    }
 
     #[test]
     fn scientific(){

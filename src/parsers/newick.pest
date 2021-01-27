@@ -13,7 +13,7 @@ inner={!("\'")~ANY}
 quoted_name = {"'" ~ inner+ ~ "'" }
 name = @{(quoted_name|unquoted_name)}
 
-leaf = @{name?}
+leaf = @{name}
 
 branch= {subtree ~node_annotation? ~length?}
 
