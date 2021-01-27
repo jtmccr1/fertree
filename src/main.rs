@@ -57,14 +57,13 @@ fn main() {
 
                     for tree in trees.iter_mut(){
                         let root= tree.get_root().unwrap();
-                        let root_height = tree.get_height(root);
+                        let root_height = tree.get_height(&root);
                         let  nodes =tree.get_node_count();
                         let  internal=tree.get_internal_node_count();
                         let mut bl =0.0;
                         let  tips =tree.get_external_node_count();
-                        let mut preorder = tree.iter();
                         let mut visited_node = 0;
-                        while let Some(node_ref) = preorder.next(tree) {
+                        for node_ref in tree.preorder_iter() {
                             if let Some(node) = tree.get_node(node_ref) {
                                 if let Some(length) = node.length {
                                     bl += length;
