@@ -2,6 +2,7 @@ use std::option::Option;
 use super::fixed_tree::FixedNode;
 use std::collections::HashMap;
 use crate::parsers::newick_parser::AnnotationValue;
+use std::collections::hash_map::Keys;
 
 pub type TreeIndex = usize;
 
@@ -20,6 +21,7 @@ pub struct MutableTreeNode {
     pub next_sibling: Option<TreeIndex>,
     pub previous_sibling: Option<TreeIndex>,
     pub length: Option<f64>,
+    pub annotations:HashMap<String,AnnotationValue>,
     number: usize,
 
 }
@@ -27,15 +29,15 @@ pub struct MutableTreeNode {
 impl MutableTreeNode {
     pub(crate) fn new(taxon: Option<String>,
                       number:usize) -> Self {
-        MutableTreeNode { taxon: taxon, label: None, parent: None, first_child: None, next_sibling: None, previous_sibling: None, length: None,  number }
+        MutableTreeNode { taxon: taxon, label: None, parent: None, first_child: None, next_sibling: None, previous_sibling: None, length: None, annotations: HashMap::new(), number }
     }
 }
 
 pub struct MutableTree {
-    pub nodes: Vec<Option<MutableTreeNode>>,
-    pub node_annotations:Vec<Option<HashMap<String,AnnotationValue>>>,
-    pub external_nodes:Vec<Option<TreeIndex>>,
-    pub internal_nodes:Vec<Option<TreeIndex>>,
+    nodes: Vec<Option<MutableTreeNode>>,
+    external_nodes:Vec<Option<TreeIndex>>,
+    internal_nodes:Vec<Option<TreeIndex>>,
+    annotation_type:HashMap<String,AnnotationValue>,
     root: Option<TreeIndex>,
 }
 
@@ -43,9 +45,9 @@ impl MutableTree {
     pub fn new(root: FixedNode) ->Self{
        let mut tree = MutableTree {
            nodes: Vec::new(),
-           node_annotations: vec![],
            external_nodes:Vec::new(),
            internal_nodes:Vec::new(),
+           annotation_type: HashMap::new(),
            root: None,
         };
         tree.new_helper(root, None);
@@ -61,7 +63,12 @@ impl MutableTree {
             self.set_length(index, length);
         }
 
-        self.node_annotations.push(node.annotations);
+        if let Some(mut annotation_map) = node.annotations {
+            for (key,value) in annotation_map.into_iter() {
+                    self.annotate_node(index, key, value);
+            }
+        }
+
         if node.children.len()>0{
             self.internal_nodes.push(Some(index));
         }else{
@@ -167,6 +174,16 @@ impl MutableTree {
         return self.get_node_mut(index).expect("node not in tree")
     }
 
+    pub fn get_node_count(&self)->usize{
+        self.nodes.len()
+    }
+    pub fn get_internal_node_count(&self)->usize{
+        self.internal_nodes.len()
+    }
+    pub fn get_external_node_count(&self)->usize{
+        self.external_nodes.len()
+    }
+
     pub fn get_num_children(&mut self, node_ref:TreeIndex) ->TreeIndex{
         let mut count = 0;
         let parent_node = self.get_unwrapped_node(node_ref);
@@ -216,33 +233,54 @@ impl MutableTree {
         node.length = Some(bl);
     }
     pub fn get_annotation(&self, index: TreeIndex, key: &str)->Option<&AnnotationValue> {
-        return if let Some(annotation) = self.node_annotations[index].as_ref() {
-            annotation.get(key)
-        } else {
-            None
-        }
+        return  self.get_unwrapped_node(index).annotations.get(key)
     }
-    pub fn get_annotation_keys(&self, index:TreeIndex) {
-        return if let Some(annotation) = self.node_annotations[index].as_ref() {
-            annotation.keys();
-        }
+    pub fn get_annotation_keys(&self) -> Keys<'_, String, AnnotationValue> {
+        self.annotation_type.keys()
     }
     pub fn get_root(&self)->Option<TreeIndex>{
         self.root
     }
     pub fn annotate_node(&mut self, index: TreeIndex, key: String, value: AnnotationValue) {
-        let possible_annotation = self.node_annotations[index].as_mut();
-        if let Some(annotation)=possible_annotation{
-                annotation.insert(key, value);
-            //TODO add annotation types to tree and check that it's the same here
-            //TODO provide iterator over annotation names
+
+        if let Some(annotation)=self.annotation_type.get(&key){
+            let value_type = std::mem::discriminant(&value);
+            let annotation_type = std::mem::discriminant(annotation);
+          if value_type==annotation_type {
+              let mut node = self.get_unwrapped_node_mut(index);
+              node.annotations.insert(key, value);
+          }else{
+                panic!("tried to annotate node with an missmatched annotation type");
+            }
         }else{
-           println!("node not found");
+            match value{
+                AnnotationValue::Discrete(_) => {
+                    self.annotation_type.insert(key.clone(),AnnotationValue::Discrete("".to_string()));
+
+                }
+                AnnotationValue::Continuous(_) =>  {
+                    self.annotation_type.insert(key.clone(),AnnotationValue::Continuous(0.0));
+
+                }
+                AnnotationValue::Set(_) =>  {
+                    //TODO check internal types
+                    self.annotation_type.insert(key.clone(),AnnotationValue::Set(vec![AnnotationValue::Discrete("0".to_string())]));
+
+                }
+            }
+            let mut node = self.get_unwrapped_node_mut(index);
+            node.annotations.insert(key, value);
         }
+
     }
     pub fn label_node(&mut self, index: TreeIndex, label: String) {
         let  node = self.get_unwrapped_node_mut(index);
         node.label = Some(label);
+    }
+
+    pub fn get_label(&self,index:TreeIndex)->&Option<String>{
+        let node = self.get_unwrapped_node(index);
+        &node.label
     }
 }
 

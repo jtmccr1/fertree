@@ -57,10 +57,10 @@ fn main() {
                     println!("nodes\tinternal\ttips\tsumbl");
 
                     for tree in trees.iter(){
-                        let  nodes =tree.nodes.len();
-                        let  internal=tree.internal_nodes.len();
+                        let  nodes =tree.get_node_count();
+                        let  internal=tree.get_internal_node_count();
                         let mut bl =0.0;
-                        let  tips =tree.external_nodes.len();
+                        let  tips =tree.get_external_node_count();
                         let mut preorder = tree.iter();
                         let mut visited_node = 0;
                         while let Some(node_ref) = preorder.next(tree) {
@@ -71,9 +71,7 @@ fn main() {
                                 visited_node +=1;
                             }
                         }
-                        println!("{:?}", tree.get_node(2));
                         println!("{}\t{}\t{}\t{}", nodes,internal,tips,bl);
-                        println!("{}", visited_node)
                     }
                 }
 
