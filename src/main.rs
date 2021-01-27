@@ -28,7 +28,6 @@ enum Fertree {
 enum StatsSubCommands {
     Tips,
 }
-
 #[derive(Debug, StructOpt)]
 struct Common {
     #[structopt(short, long, parse(from_os_str), help = "input tree file")]
@@ -53,10 +52,12 @@ fn main() {
                     println!("This is us getting the tips!")
                 },
                 None =>{
-                    let trees = parse_input(common.infile).expect("error reading file");
+                    let mut trees = parse_input(common.infile).expect("error reading file");
                     println!("nodes\tinternal\ttips\tsumbl");
 
-                    for tree in trees.iter(){
+                    for tree in trees.iter_mut(){
+                        let root= tree.get_root().unwrap();
+                        let root_height = tree.get_height(root);
                         let  nodes =tree.get_node_count();
                         let  internal=tree.get_internal_node_count();
                         let mut bl =0.0;
@@ -71,7 +72,7 @@ fn main() {
                                 visited_node +=1;
                             }
                         }
-                        println!("{}\t{}\t{}\t{}", nodes,internal,tips,bl);
+                        println!("{}\t{}\t{}\t{}\t{}", nodes,internal,tips,bl,root_height);
                     }
                 }
 
