@@ -1,12 +1,13 @@
 // Needed by pest
 use pest_consume::{match_nodes, Error, Parser};
-use super::super::tree::fixed_tree::FixedNode;
 use std::collections::HashMap;
 use crate::tree::mutable_tree::MutableTree;
+use crate::tree::fixed_tree::FixedNode;
+use std::fmt;
 
 
 #[derive(Parser)]
-#[grammar = "./parsers/newick.pest"]
+#[grammar = "./io/parser/newick.pest"]
 pub struct NewickParser;
 
 type Result<T> = std::result::Result<T, Error<Rule>>;
@@ -17,6 +18,21 @@ pub enum AnnotationValue{
     Discrete(String),
     Continuous(f64),
     Set(Vec<AnnotationValue>)
+}
+
+impl fmt::Display for AnnotationValue {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            AnnotationValue::Discrete(string)=>write!(f,"{}",string),
+            AnnotationValue:: Continuous(f64)=>write!(f,"{}",f64.to_string()),
+            AnnotationValue::Set(s)=>{
+                let s = s.iter().map(|a| a.to_string())
+                    .collect::<Vec<String>>()
+                    .join(",");
+                write!(f,"{}",s)
+            }
+        }
+    }
 }
 
 #[pest_consume::parser]
@@ -201,7 +217,7 @@ impl NewickParser {
 
 #[cfg(test)]
 mod tests {
-    use crate::parsers::newick_parser::{NewickParser};
+    use crate::io::parser::newick_parser::NewickParser;
 
     #[test]
     fn it_works() {

@@ -4,8 +4,8 @@ use std::{io, path};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use rebl::tree::mutable_tree::{MutableTree};
-use rebl::parsers::newick_parser::NewickParser;
 use structopt::StructOpt;
+use rebl::io::parser::newick_parser::NewickParser;
 
 #[derive(Debug, StructOpt)]
 #[structopt(about = "command line tools for processing phylogenetic trees in rust")]
@@ -57,7 +57,7 @@ fn main() {
 
                     for tree in trees.iter_mut(){
                         let root= tree.get_root().unwrap();
-                        let root_height = tree.get_height(&root);
+                        let root_height = tree.get_height(root);
                         let  nodes =tree.get_node_count();
                         let  internal=tree.get_internal_node_count();
                         let mut bl =0.0;

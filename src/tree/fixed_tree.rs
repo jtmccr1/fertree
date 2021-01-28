@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use crate::parsers::newick_parser::AnnotationValue;
+use crate::io::parser::newick_parser::AnnotationValue;
 
 #[derive(Debug)]
 pub struct FixedNode {
