@@ -70,6 +70,9 @@ impl MutableTree {
         if let Some(length) = node.length {
             self.set_length(index, length);
         }
+        if let Some(label) = node.label {
+            self.set_label(index, label);
+        }
 
         if let Some(mut annotation_map) = node.annotations {
             for (key, value) in annotation_map.into_iter() {
@@ -417,6 +420,11 @@ impl MutableTree {
         }
         return None;
     }
+    pub fn set_label(&mut self, index:TreeIndex, label:String){
+        let node = self.get_node_mut(index).expect("node not in tree");
+        node.label = Some(label);
+    }
+
     pub fn set_length(&mut self, index: TreeIndex, bl: f64) {
         let node = self.get_node_mut(index).expect("node not in tree");
         node.length = Some(bl);

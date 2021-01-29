@@ -1,5 +1,14 @@
 use crate::tree::mutable_tree::{MutableTree, TreeIndex};
 use crate::io::parser::newick_parser::AnnotationValue;
+use std::fmt;
+
+impl fmt::Display for MutableTree {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let s = write_newick(self);
+        write!(f,"{}",s)
+    }
+}
+
 
 fn write_newick(tree: &MutableTree) -> String {
     let mut s = write_node(tree,tree.get_root().unwrap());
@@ -37,14 +46,15 @@ fn write_annotations(tree: &MutableTree, node_ref: TreeIndex) ->String{
     let mut s = String::new();
     let keys = tree.get_annotation_keys();
     if keys.len() > 0 {
-
         let annotation_string = keys
             .map(|k| write_annotation(k,tree.get_annotation(node_ref,k)))
             .collect::<Vec<String>>()
             .join(",");
-        s.push_str("[&");
-        s.push_str(annotation_string.as_str());
-        s.push_str("]");
+        if annotation_string.len()>0 {
+            s.push_str("[&");
+            s.push_str(annotation_string.as_str());
+            s.push_str("]");
+        }
     }
     s
 }
@@ -63,6 +73,7 @@ mod tests {
     use crate::tree::fixed_tree::FixedNode;
     use crate::tree::mutable_tree::MutableTree;
     use crate::io::writer::newick_writer::{write_newick, write_node};
+    use crate::io::parser::newick_parser::NewickParser;
 
     #[test]
     fn basic_tree(){
@@ -80,13 +91,31 @@ mod tests {
         root.children = vec![Box::new(internal1), Box::new(tip3)];
 
         let tree = MutableTree::from_fixed_node(root);
-
         let internal = tree.get_internal_node(1).unwrap();
-        println!("{:?}", tree.is_external(internal.number));
-        println!("{:?}", internal);
-        println!("{}", write_node(&tree,internal.number ));
-        println!("{}",write_newick(&tree));
+        assert_eq!("((:1,:2):0.1,:1);",tree.to_string());
+    }
+    #[test]
+    fn tree_with_annotations(){
+        let s = "((A[&location=UK]:0.3,B[&location=USA]:0.05):0.9,C[&location=US]:0.1);";
+        let root = NewickParser::parse_tree(s).expect("error in parsing");
+        let tree = MutableTree::from_fixed_node(root);
+        assert_eq!(s,tree.to_string())
+    }
+        #[test]
+    fn tree_with_label(){
+        let s = "((A[&location=UK]:0.3,B[&location=USA]:0.05)label:0.9,C[&location=US]:0.1);";
+        let root = NewickParser::parse_tree(s).expect("error in parsing");
+        let tree = MutableTree::from_fixed_node(root);
+            println!("{:?}", tree.get_internal_node(1));
+        assert_eq!(s,tree.to_string())
+    }
 
+    #[test]
+    fn tree_with_quotes(){
+        let s = "((A[&location=UK]:0.3,B[&location=USA]:0.05):0.9,'C d'[&location=US]:0.1);";
+        let root = NewickParser::parse_tree(s).expect("error in parsing");
+        let tree = MutableTree::from_fixed_node(root);
+        assert_eq!(s,tree.to_string())
     }
 
 }
