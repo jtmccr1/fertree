@@ -22,7 +22,7 @@ pub struct MutableTreeNode {
     pub length: Option<f64>,
     pub height: Option<f64>,
     pub annotations: HashMap<String, AnnotationValue>,
-    number: usize,
+    pub number: usize,
 
 }
 
@@ -157,12 +157,14 @@ impl MutableTree {
         }
         self.get_unwrapped_node(node).height.expect("how did it come to this")
     }
-    pub fn get_node_label(&self, node:TreeIndex)->Option<&str>{
-        unimplemented!();
+    pub fn get_node_label(&self, node:TreeIndex)->&Option<String>{
+        &self.get_unwrapped_node(node).label
     }
     fn get_current_height(&self, node: TreeIndex) -> f64 {
         self.get_unwrapped_node(node).height.expect("how did it come to this. I thought heights were trust worthy")
     }
+
+
     fn calc_node_heights(&mut self) {
         self.heights_known = true;
         self.calc_height_above_root();
@@ -313,6 +315,15 @@ impl MutableTree {
         return self.get_node_mut(index).expect(&*format!("node {} not in tree", index));
     }
 
+    pub(crate) fn get_taxon(&self, node_ref:TreeIndex) ->Option<&str>{
+        let node = self.get_unwrapped_node(node_ref);
+        if let Some(taxon) = &node.taxon{
+            Some(taxon.as_str())
+        }else{
+            None
+        }
+    }
+
     pub fn get_node_count(&self) -> usize {
         self.nodes.len()
     }
@@ -327,6 +338,7 @@ impl MutableTree {
         let mut count = 0;
         let parent_node = self.get_unwrapped_node(node_ref);
         if let Some(first_child) = parent_node.first_child {
+            count+=1;
             let mut sibling_node = self.get_unwrapped_node(first_child);
             loop {
                 if let Some(sibling) = sibling_node.next_sibling {
@@ -361,22 +373,42 @@ impl MutableTree {
         }
         return None;
     }
+    pub fn get_external_node(&self, index: usize) -> Option<&MutableTreeNode> {
+        self.nodes.get(self.external_nodes[index])
+    }
+    pub fn get_internal_node(&self, index: usize) -> Option<&MutableTreeNode> {
+        self.nodes.get(self.internal_nodes[index])
+    }
+
     pub fn get_children(&self,node:TreeIndex)->Vec<TreeIndex>{
-        unimplemented!();
-    }
-    pub fn get_next_sibling(&self, index: TreeIndex) -> Option<TreeIndex> {
-        let node = self.get_unwrapped_node(index);
-        if let Some(sib) = node.next_sibling {
-            return Some(sib);
+        let mut kids:Vec<TreeIndex> = vec![];
+        let parent_node = self.get_unwrapped_node(node);
+        if let Some(first_child) = parent_node.first_child {
+            kids.push(first_child);
+            let mut sibling_node = self.get_unwrapped_node(first_child);
+            loop {
+                if let Some(sibling) = sibling_node.next_sibling {
+                    kids.push(sibling);
+                    sibling_node = self.get_unwrapped_node(sibling);
+
+                } else {
+                    break;
+                }
+            }
         }
-        return None;
+        return kids;
     }
-    pub fn get_previous_sibling(&self, index: TreeIndex) -> Option<TreeIndex> {
+    pub fn get_next_sibling(&self, index: TreeIndex) -> &Option<TreeIndex> {
         let node = self.get_unwrapped_node(index);
-        if let Some(sib) = node.previous_sibling {
-            return Some(sib);
-        }
-        return None;
+        &node.next_sibling
+    }
+    pub fn get_previous_sibling(&self, index: TreeIndex) -> &Option<TreeIndex> {
+        let node = self.get_unwrapped_node(index);
+        &node.previous_sibling
+    }
+    pub fn get_first_child(&self,index:TreeIndex)->&Option<TreeIndex>{
+        let node = self.get_unwrapped_node(index);
+        &node.first_child
     }
     pub fn get_parent(&self, index: TreeIndex) -> Option<TreeIndex> {
         let node = self.get_unwrapped_node(index);
@@ -405,8 +437,8 @@ impl MutableTree {
     }
     pub fn is_external(&self, node_ref:TreeIndex)->bool{
         match self.get_unwrapped_node(node_ref).first_child{
-            Some(node)=>true,
-            None=>false
+            Some(node)=>false,
+            None=>true
         }
     }
     pub fn get_root(&self) -> Option<TreeIndex> {

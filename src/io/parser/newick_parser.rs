@@ -29,7 +29,7 @@ impl fmt::Display for AnnotationValue {
                 let s = s.iter().map(|a| a.to_string())
                     .collect::<Vec<String>>()
                     .join(",");
-                write!(f,"{}",s)
+                write!(f,"{{ {} }}",s)
             }
         }
     }
@@ -199,7 +199,7 @@ impl NewickParser {
 }
 
 impl NewickParser {
-    pub fn parse_tree(str: &str) -> Result<MutableTree> {
+    pub fn parse_tree(str: &str) -> Result<FixedNode> {
         let start = std::time::Instant::now();
         let inputs = NewickParser::parse(Rule::tree, str).unwrap();
         println!("It took {} ms to parse the file", start.elapsed().as_millis());
@@ -207,11 +207,11 @@ impl NewickParser {
         let input = inputs.single().unwrap();
 // Consume the `Node` recursively into the final value
         println!("processing pest rules");
-        let root = NewickParser::tree(input)?;
-        let start = std::time::Instant::now();
-        let tree= MutableTree::from_fixed_node(root);
-        println!("It took {} ms to convert to tree", start.elapsed().as_millis());
-        Ok(tree)
+        NewickParser::tree(input)
+        // let start = std::time::Instant::now();
+        // let tree= MutableTree::from_fixed_node(root);
+        // println!("It took {} ms to convert to tree", start.elapsed().as_millis());
+        // Ok(tree)
     }
 }
 

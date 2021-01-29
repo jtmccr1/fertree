@@ -92,7 +92,7 @@ fn parse_input(input: Option<path::PathBuf>)  -> Result<Vec<MutableTree>,io::Err
             let reader = BufReader::new(file);
             for line in reader.lines() {
                 if let Ok(tree)=NewickParser::parse_tree(&*line?){
-                    trees.push(tree);
+                    trees.push(MutableTree::from_fixed_node(tree));
                 }
                else{
                    println!("no tree at this line");
@@ -105,7 +105,7 @@ fn parse_input(input: Option<path::PathBuf>)  -> Result<Vec<MutableTree>,io::Err
             let  handel = stdin.lock();
             for line in handel.lines() {
                 if let Ok(tree)=NewickParser::parse_tree(&*line?){
-                    trees.push(tree);
+                    trees.push(MutableTree::from_fixed_node(tree));
                 }
             }
         }
