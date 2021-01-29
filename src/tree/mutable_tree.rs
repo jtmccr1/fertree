@@ -198,7 +198,6 @@ impl MutableTree {
                 self.set_height(node_ref, 0.0);
             }
         }
-        println!("{:?}", self.nodes)
     }
 
 
