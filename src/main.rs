@@ -9,8 +9,10 @@ use std::path;
 #[macro_use]
 extern crate log;
 
+
 #[derive(Debug, StructOpt)]
 #[structopt(about = "command line tools for processing phylogenetic trees in rust")]
+//TODO reformat these for better api
 enum Fertree {
     Stats {
         #[structopt(flatten)]
@@ -28,14 +30,14 @@ enum Fertree {
         #[structopt(flatten)]
         common: Common,
         #[structopt(short, long, parse(from_os_str), help = "trait csv with taxa labels as frist field")]
-        traits: Option <path::PathBuf>,
+        traits: path::PathBuf,
     },
     ExtractAnnotations {
         #[structopt(flatten)]
         common: Common,
     }
-
 }
+
 
 
 #[derive(Debug, StructOpt)]
@@ -45,14 +47,16 @@ pub struct Common {
     #[structopt(short, long, parse(from_os_str), help = "output tree file",global=true)]
     outfile: Option<path::PathBuf>,
     #[structopt(short, long,global=true)]
-    debug: bool,
-    #[structopt(short, long,global=true)]
     release: bool,
+    //TODO implement this log file option
+    #[structopt(short, long, parse(from_os_str), help = "logfile",global=true)]
+    logfile: Option<path::PathBuf>
+    //TODO include verbosity flag here to overwrite env_logger
 }
 
 fn main() {
     env_logger::init();
-    info!("starting up");
+    trace!("starting up");
     let args = Fertree::from_args();
     debug!("{:?}",args);
     let start = std::time::Instant::now();

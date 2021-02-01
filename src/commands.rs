@@ -69,14 +69,11 @@ pub(crate) mod annotate{
     use crate::Common;
     use std::path;
     use std::error::Error;
+    use crate::commands::command_io::parse_csv;
 
 
-    pub fn parse_csv(traits:Option <path::PathBuf>)->Result<>{
-
-    }
-
-    pub fn run(common:Common,traits:Option <path::PathBuf>)->Result<(),Box<dyn Error>>{
-        Ok(())
+    pub fn run(common:Common,traits:path::PathBuf)->Result<(),Box<dyn Error>>{
+        parse_csv(traits)
     }
     pub fn annotate_tips(mut tree:MutableTree, annotation_map:HashMap<String,HashMap<String,AnnotationValue>>){
         for taxon in annotation_map.keys(){
@@ -104,52 +101,62 @@ pub(crate) mod stats{
     pub enum StatsSubCommands {
         Tips,
     }
-    pub fn run(common:Common, cmd:Option<StatsSubCommands>)->Result<(),Box<dyn Error>>{
+
+    fn tips(common:Common)->Result<(),Box<dyn Error>>{
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
+        let trees = command_io::parse_tree_input(common.infile)?;
+        for tree in trees.iter(){
+            let mut i =0;
+            while i<tree.get_external_node_count(){
+                if let Some(tip)=tree.get_external_node(i){
+                    if let Some(taxa)= &tip.taxon{
+                        writeln!(handle, "{}", taxa)?;
+                    }
+                }
+                i+=1;
+            }
+        }
+        Ok(())
+    }
+    fn general_stats(common:Common)->Result<(),Box<dyn Error>> {
+        let stdout = std::io::stdout(); // get the global stdout entity
+        let mut handle = stdout.lock(); // acquire a lock on it
+        let mut trees = command_io::parse_tree_input(common.infile).expect("error reading file");
+        writeln!(handle,"nodes\tinternal\ttips\trootHeight\tsumbl\tmeanbl")?;
+
+        for tree in trees.iter_mut(){
+            let root= tree.get_root().unwrap();
+            let root_height = tree.get_height(root);
+            let  nodes =tree.get_node_count();
+            let  internal=tree.get_internal_node_count();
+            let  tips =tree.get_external_node_count();
+            let mut bl = Vec::with_capacity(tree.get_node_count());
+            bl.resize(tree.get_node_count(), 0.0);
+            for node_ref in tree.preorder_iter() {
+                if node_ref !=tree.get_root().expect("stats assume rooted nodes") {
+                    if let Some(node) = tree.get_node(node_ref) {
+                        if let Some(length) = node.length {
+                            bl[node_ref] = length;
+                        }
+                    }
+                }
+            }
+            let sum_bl = bl.iter().fold(0.0, |acc, x| acc + x);
+            let mean_bl = sum_bl / ((tree.get_node_count()as f64)-1.0); //no branch on root
+            writeln!(handle,"{}\t{}\t{}\t{}\t{}\t{}", nodes,internal,tips,root_height,sum_bl,mean_bl)?;
+        }
+        Ok(())
+    }
+    pub fn run(common:Common, cmd:Option<StatsSubCommands>)->Result<(),Box<dyn Error>>{
+        //TODO move tree reading and output buffer handling out here and pass to commands
 
         match cmd {
             Some(StatsSubCommands::Tips) =>{
-                // info!("{:?}",common);
-                let trees = command_io::parse_tree_input(common.infile).expect("error reading file");
-                for tree in trees.iter(){
-                    let mut i =0;
-                    while i<tree.get_external_node_count(){
-                        if let Some(tip)=tree.get_external_node(i){
-                            if let Some(taxa)= &tip.taxon{
-                                writeln!(handle, "{}", taxa)?;
-                            }
-                        }
-                        i+=1;
-                    }
-                }
-            Ok(())
+                tips(common)
             },
             None =>{
-                let mut trees = command_io::parse_tree_input(common.infile).expect("error reading file");
-                writeln!(handle,"nodes\tinternal\ttips\trootHeight\tsumbl\tmeanbl")?;
-
-                for tree in trees.iter_mut(){
-                    let root= tree.get_root().unwrap();
-                    let root_height = tree.get_height(root);
-                    let  nodes =tree.get_node_count();
-                    let  internal=tree.get_internal_node_count();
-                    let  tips =tree.get_external_node_count();
-                    let mut bl = Vec::with_capacity(tree.get_node_count());
-                    for node_ref in tree.preorder_iter() {
-                        if node_ref !=tree.get_root().expect("stats assume rooted nodes") {
-                            if let Some(node) = tree.get_node(node_ref) {
-                                if let Some(length) = node.length {
-                                    bl[node_ref] = length;
-                                }
-                            }
-                        }
-                    }
-                    let sum_bl = bl.iter().fold(0.0, |acc, x| acc + x);
-                    let mean_bl = sum_bl / ((tree.get_node_count()as f64)-1.0); //no branch on root
-                    writeln!(handle,"{}\t{}\t{}\t{}\t{}\t{}", nodes,internal,tips,root_height,sum_bl,mean_bl)?;
-                }
-                Ok(())
+              general_stats(common)
             }
 
         }
@@ -161,35 +168,54 @@ mod command_io {
     use rebl::tree::mutable_tree::MutableTree;
     use std::fs::File;
     use std::io::{BufReader, BufRead, stdout, Write, BufWriter};
-    use rebl::io::parser::newick_parser::NewickParser;
+    use rebl::io::parser::newick_parser::{NewickParser, AnnotationValue};
     use std::path::Path;
+    use std::collections::HashMap;
+    use std::error::Error;
 
-    pub fn parse_tree_input(input: Option<path::PathBuf>) -> Result<Vec<MutableTree>,io::Error> {
+    pub fn parse_tree_input(input: Option<path::PathBuf>) -> Result<Vec<MutableTree>, io::Error> {
         let mut trees = vec![];
         match input {
             Some(path) => {
                 let file = File::open(path)?;
                 let reader = BufReader::new(file);
                 for line in reader.lines() {
-                    if let Ok(tree)=NewickParser::parse_tree(&*line?){
+                    if let Ok(tree) = NewickParser::parse_tree(&*line?) {
                         trees.push(MutableTree::from_fixed_node(tree));
-                    }
-                    else{
-                       warn!("no tree at this line");
+                    } else {
+                        warn!("no tree at this line");
                     }
                 }
             }
             None => {
                 info!("no file reading from stdin");
                 let stdin = io::stdin();
-                let  handel = stdin.lock();
+                let handel = stdin.lock();
                 for line in handel.lines() {
-                    if let Ok(tree)=NewickParser::parse_tree(&*line?){
+                    if let Ok(tree) = NewickParser::parse_tree(&*line?) {
                         trees.push(MutableTree::from_fixed_node(tree));
                     }
                 }
             }
         }
         return Ok(trees);
+    }
+
+    pub fn write_to_output(output:Option<path::PathBuf>) -> Result<(), io::Error> {
+        unimplemented!()
+    }
+//HashMap<String,HashMap<String,AnnotationValue>>
+    pub fn parse_csv(trait_file:path::PathBuf)->Result<(),Box<dyn Error>>{
+        let file = File::open(trait_file)?;
+        let mut rdr = csv::ReaderBuilder::new()
+            .delimiter(b'\t')
+            .flexible(true)
+            .comment(Some(b'#'))
+            .from_reader(file);
+        for result in rdr.records() {
+            let record = result?;
+            println!("{:?}", record);
+        }
+    Ok(())
     }
 }

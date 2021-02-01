@@ -6,6 +6,7 @@ use crate::tree::fixed_tree::FixedNode;
 use std::fmt;
 
 
+
 #[derive(Parser)]
 #[grammar = "./io/parser/newick.pest"]
 pub struct NewickParser;
@@ -202,15 +203,14 @@ impl NewickParser {
     pub fn parse_tree(str: &str) -> Result<FixedNode> {
         let start = std::time::Instant::now();
         let inputs = NewickParser::parse(Rule::tree, str).unwrap();
-        println!("It took {} ms to parse the file", start.elapsed().as_millis());
 // There should be a single root node in the parsed tree
         let input = inputs.single().unwrap();
 // Consume the `Node` recursively into the final value
-        println!("processing pest rules");
-        NewickParser::tree(input)
+        let root = NewickParser::tree(input);
         // let start = std::time::Instant::now();
         // let tree= MutableTree::from_fixed_node(root);
-        // println!("It took {} ms to convert to tree", start.elapsed().as_millis());
+        trace!("{} Tree parsed in ",start.elapsed().as_secs());
+        root
         // Ok(tree)
     }
 }
