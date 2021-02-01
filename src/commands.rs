@@ -62,12 +62,22 @@ mod collapse{
     }
 }
 
-mod annotate{
+pub(crate) mod annotate{
     use rebl::tree::mutable_tree::MutableTree;
     use std::collections::HashMap;
     use rebl::io::parser::newick_parser::AnnotationValue;
+    use crate::Common;
+    use std::path;
+    use std::error::Error;
 
 
+    pub fn parse_csv(traits:Option <path::PathBuf>)->Result<>{
+
+    }
+
+    pub fn run(common:Common,traits:Option <path::PathBuf>)->Result<(),Box<dyn Error>>{
+        Ok(())
+    }
     pub fn annotate_tips(mut tree:MutableTree, annotation_map:HashMap<String,HashMap<String,AnnotationValue>>){
         for taxon in annotation_map.keys(){
             let node_ref = tree.get_taxon_node(taxon).expect(&*("Taxon ".to_owned() + taxon + " not found in tree"));
@@ -86,66 +96,67 @@ mod split{
 pub(crate) mod stats{
     use structopt::StructOpt;
     use crate::{Common};
-    use super::commandIO;
+    use super::command_io;
     use std::io::{self, Write};
+    use std::error::Error;
+
     #[derive(Debug, StructOpt)]
     pub enum StatsSubCommands {
         Tips,
     }
-    pub fn run(common:Common, cmd:Option<StatsSubCommands>){
+    pub fn run(common:Common, cmd:Option<StatsSubCommands>)->Result<(),Box<dyn Error>>{
+        let stdout = std::io::stdout(); // get the global stdout entity
+        let mut handle = stdout.lock(); // acquire a lock on it
+
         match cmd {
             Some(StatsSubCommands::Tips) =>{
                 // info!("{:?}",common);
-                let trees = commandIO::parse_tree_input(common.infile).expect("error reading file");
-
-                let stdout = std::io::stdout(); // get the global stdout entity
-                let mut handle = stdout.lock(); // acquire a lock on it
-
+                let trees = command_io::parse_tree_input(common.infile).expect("error reading file");
                 for tree in trees.iter(){
                     let mut i =0;
                     while i<tree.get_external_node_count(){
                         if let Some(tip)=tree.get_external_node(i){
                             if let Some(taxa)= &tip.taxon{
-                                writeln!(handle, "{}", taxa);
+                                writeln!(handle, "{}", taxa)?;
                             }
                         }
                         i+=1;
                     }
                 }
-
+            Ok(())
             },
             None =>{
-                let mut trees = commandIO::parse_tree_input(common.infile).expect("error reading file");
-                println!("nodes\tinternal\ttips\tsumbl");
+                let mut trees = command_io::parse_tree_input(common.infile).expect("error reading file");
+                writeln!(handle,"nodes\tinternal\ttips\trootHeight\tsumbl\tmeanbl")?;
 
                 for tree in trees.iter_mut(){
                     let root= tree.get_root().unwrap();
                     let root_height = tree.get_height(root);
                     let  nodes =tree.get_node_count();
                     let  internal=tree.get_internal_node_count();
-                    let mut bl =0.0;
                     let  tips =tree.get_external_node_count();
-                    let mut visited_node = 0;
+                    let mut bl = Vec::with_capacity(tree.get_node_count());
                     for node_ref in tree.preorder_iter() {
-                        if let Some(node) = tree.get_node(node_ref) {
-                            if let Some(length) = node.length {
-                                bl += length;
+                        if node_ref !=tree.get_root().expect("stats assume rooted nodes") {
+                            if let Some(node) = tree.get_node(node_ref) {
+                                if let Some(length) = node.length {
+                                    bl[node_ref] = length;
+                                }
                             }
-                            visited_node +=1;
                         }
                     }
-                    println!("{}\t{}\t{}\t{}\t{}", nodes,internal,tips,bl,root_height);
-                    let start = std::time::Instant::now();
-                    println!("{}",tree);
-                    println!("It took {} ms to convert to string", start.elapsed().as_millis());
+                    let sum_bl = bl.iter().fold(0.0, |acc, x| acc + x);
+                    let mean_bl = sum_bl / ((tree.get_node_count()as f64)-1.0); //no branch on root
+                    writeln!(handle,"{}\t{}\t{}\t{}\t{}\t{}", nodes,internal,tips,root_height,sum_bl,mean_bl)?;
                 }
+                Ok(())
             }
 
         }
     }
 }
 
-mod commandIO{
+mod command_io {
     use std::{path, io};
     use rebl::tree::mutable_tree::MutableTree;
     use std::fs::File;
@@ -164,12 +175,12 @@ mod commandIO{
                         trees.push(MutableTree::from_fixed_node(tree));
                     }
                     else{
-                        println!("no tree at this line");
+                       warn!("no tree at this line");
                     }
                 }
             }
             None => {
-                println!("no file");
+                info!("no file reading from stdin");
                 let stdin = io::stdin();
                 let  handel = stdin.lock();
                 for line in handel.lines() {

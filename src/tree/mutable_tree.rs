@@ -7,9 +7,6 @@ use std::collections::hash_map::Keys;
 pub type TreeIndex = usize;
 
 
-pub struct Taxon {
-    name: Option<String>,
-}
 
 #[derive(Debug)]
 pub struct MutableTreeNode {
