@@ -3,6 +3,7 @@ use pest_consume::{match_nodes, Error, Parser};
 use std::collections::HashMap;
 use crate::tree::mutable_tree::MutableTree;
 use crate::tree::fixed_tree::FixedNode;
+use serde::{Serialize, Deserialize};
 use std::fmt;
 
 
@@ -14,7 +15,9 @@ pub struct NewickParser;
 type Result<T> = std::result::Result<T, Error<Rule>>;
 type Node<'i> = pest_consume::Node<'i, Rule, ()>;
 
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone,Deserialize)]
+#[serde(untagged)]
+
 pub enum AnnotationValue{
     Discrete(String),
     Continuous(f64),

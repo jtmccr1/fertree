@@ -47,6 +47,7 @@ fn write_annotations(tree: &MutableTree, node_ref: TreeIndex) ->String{
     let keys = tree.get_annotation_keys();
     if keys.len() > 0 {
         let annotation_string = keys
+            .filter(|k|tree.get_annotation(node_ref,k).is_some())
             .map(|k| write_annotation(k,tree.get_annotation(node_ref,k)))
             .collect::<Vec<String>>()
             .join(",");

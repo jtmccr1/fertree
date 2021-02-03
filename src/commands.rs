@@ -69,21 +69,48 @@ pub(crate) mod annotate{
     use crate::Common;
     use std::path;
     use std::error::Error;
+    use std::io::{self, Write};
     use crate::commands::command_io::parse_csv;
+    use crate::commands::command_io;
+    use csv::Reader;
+    use std::fs::File;
 
 
-    pub fn run(common:Common,traits:path::PathBuf)->Result<(),Box<dyn Error>>{
-        parse_csv(traits)
+    pub fn run(common:Common,traits:path::PathBuf) ->Result<(),Box<dyn Error>>{
+        let stdout = std::io::stdout(); // get the global stdout entity
+        let mut handle = stdout.lock(); // acquire a lock on it
+
+        let mut reader = parse_csv(traits)?;
+
+        let mut trees = command_io::parse_tree_input(common.infile)?;
+        for tree in trees.iter_mut(){
+            annotate_tips(tree, &mut reader);
+            writeln!(handle, "{}", tree)?;
+        }
+
+    Ok(())
     }
-    pub fn annotate_tips(mut tree:MutableTree, annotation_map:HashMap<String,HashMap<String,AnnotationValue>>){
-        for taxon in annotation_map.keys(){
-            let node_ref = tree.get_taxon_node(taxon).expect(&*("Taxon ".to_owned() + taxon + " not found in tree"));
-            if let Some(annotations)=annotation_map.get(taxon){
-                for (key,value) in annotations{
-                    tree.annotate_node(node_ref, key.clone(), value.clone())
+    pub fn annotate_tips(tree:& mut MutableTree, reader:&mut Reader<File>) ->Result<(),Box<dyn Error>>{
+        type Record = HashMap<String, Option<AnnotationValue>>;
+
+        let header = reader.headers()?;
+        let taxon_key = header.get(0).unwrap().to_string();
+
+        for result in reader.deserialize() {
+            let record: Record = result?;
+            if let Some(AnnotationValue::Discrete(taxon)) = record.get(&*taxon_key).unwrap() {
+                if let Some(node_ref) = tree.get_taxon_node(&taxon) {
+                    for (key, value) in record {
+                        if key != taxon_key {
+                            if let Some(annotation_value) = value {
+                                tree.annotate_node(node_ref, key, annotation_value)
+                            }
+                        }
+                    }
                 }
             }
         }
+        Ok(())
     }
 }
 
@@ -172,6 +199,7 @@ mod command_io {
     use std::path::Path;
     use std::collections::HashMap;
     use std::error::Error;
+    use csv::Reader;
 
     pub fn parse_tree_input(input: Option<path::PathBuf>) -> Result<Vec<MutableTree>, io::Error> {
         let mut trees = vec![];
@@ -205,17 +233,19 @@ mod command_io {
         unimplemented!()
     }
 //HashMap<String,HashMap<String,AnnotationValue>>
-    pub fn parse_csv(trait_file:path::PathBuf)->Result<(),Box<dyn Error>>{
-        let file = File::open(trait_file)?;
+    pub fn parse_csv(trait_file:path::PathBuf) -> Result<Reader<File>,Box<dyn Error>> {
+
+    let file = File::open(trait_file)?;
         let mut rdr = csv::ReaderBuilder::new()
             .delimiter(b'\t')
             .flexible(true)
             .comment(Some(b'#'))
             .from_reader(file);
-        for result in rdr.records() {
-            let record = result?;
-            println!("{:?}", record);
-        }
-    Ok(())
+
+        // We nest this call in its own scope because of lifetimes.
+        debug!("read with headers:{:?}", rdr.headers().unwrap());
+
+    return Ok(rdr);
+
     }
 }
