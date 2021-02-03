@@ -91,6 +91,7 @@ pub(crate) mod annotate{
     Ok(())
     }
     pub fn annotate_tips(tree:& mut MutableTree, reader:&mut Reader<File>) ->Result<(),Box<dyn Error>>{
+        //todo fix to handle taxa differently
         type Record = HashMap<String, Option<AnnotationValue>>;
 
         let header = reader.headers()?;
@@ -98,6 +99,7 @@ pub(crate) mod annotate{
 
         for result in reader.deserialize() {
             let record: Record = result?;
+            //See todo above
             if let Some(AnnotationValue::Discrete(taxon)) = record.get(&*taxon_key).unwrap() {
                 if let Some(node_ref) = tree.get_taxon_node(&taxon) {
                     for (key, value) in record {
@@ -107,6 +109,8 @@ pub(crate) mod annotate{
                             }
                         }
                     }
+                }else{
+                    warn!("Taxon {} not found in tree",taxon)
                 }
             }
         }
