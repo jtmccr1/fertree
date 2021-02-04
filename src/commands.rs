@@ -14,43 +14,94 @@ mod introductions{
 mod thin{
 }
 
-mod collapse{
+pub(crate) mod collapse{
     use rebl::tree::mutable_tree::{MutableTree, TreeIndex};
     use std::collections::HashSet;
     use rand::Rng;
     use rebl::io::parser::newick_parser::AnnotationValue;
+    use crate::Common;
+    use crate::commands::command_io;
+    use std::error::Error;
+    use std::io::{self, Write};
 
 
-    pub fn collapse_uniform_clades(tree:&MutableTree,key:&String) {
-        // Get clades that are all the same
-        let mut types: Vec<HashSet<&String>> = Vec::with_capacity(tree.get_node_count());
-        for node_ref in tree.preorder_iter().rev() {
-            let mut set = HashSet::new();
-            if tree.get_num_children(node_ref) == 0 {
-                if let Some(annotation) = tree.get_annotation(node_ref, key) {
-                    match annotation {
-                        AnnotationValue::Discrete(s) => {
-                            set.insert(s);
-                            types[node_ref] = set;
-                        },
-                        _ => { panic!("not a discrete trait") }
-                    }
-                } else {
-                    //TODO ignore missing
-                }
-            } else {
-                let mut i = 0;
-                while i < tree.get_num_children(node_ref) {
-                    if let Some(child) = tree.get_child(node_ref, i) {
-                        set = set.union(&types[child]).cloned().collect();
-                        i += 1;
-                    }
-                }
-                types[node_ref] = set;
-            }
+
+    pub fn run(common: Common,key:String,value:String)->Result<(),Box<dyn Error>> {
+        let stdout = std::io::stdout(); // get the global stdout entity
+        let mut handle = stdout.lock(); // acquire a lock on it
+
+        let mut trees = command_io::parse_tree_input(common.infile)?;
+        for tree in trees.iter_mut(){
+            tree.calc_node_heights();
+            let  new_tree = collapse_uniform_clades(tree, &key, &value);
+            writeln!(handle, "{}", new_tree)?;
+
         }
+        Ok(())
     }
 
+    pub  fn collapse_uniform_clades(tree:&MutableTree,key:&String,value: &String) ->MutableTree{
+        let mut taxa:HashSet<String> = tree.external_nodes.iter()
+            .map(|node|tree.get_taxon(*node)).map(|n|String::from(n.unwrap())).collect();
+
+        let monophyletic_groups = get_monophyletic_groups(tree, tree.get_root().unwrap(), key, value);
+        if monophyletic_groups.0{
+            warn!("The whole tree is a monophyletic clade!")
+        }
+        for group in monophyletic_groups.1.iter(){
+            //pick one to keep
+            // remove the rest
+            for node in group.iter(){
+                let taxon = tree.get_taxon(*node).expect("This is not external node!");
+                taxa.remove(taxon);
+            }
+        }
+        let mut new_tree = MutableTree::from_tree(tree,&taxa);
+        new_tree.calculate_branchlengths();
+        new_tree
+    }
+
+    fn get_monophyletic_groups(tree:&MutableTree, node_ref:TreeIndex,key:&String,target_annotation:&String)->(bool,Vec<Vec<TreeIndex>>) {
+        if tree.is_external(node_ref) {
+            if let Some(annotation) = tree.get_annotation(node_ref, key) {
+                match annotation {
+                    AnnotationValue::Discrete(s) => {
+                        return if s == target_annotation {
+                            (true, vec![vec![node_ref]])
+                        } else {
+                            (false, vec![vec![]])
+                        }
+                    },
+                    _ => { panic!("not a discrete trait") }
+                }
+            }
+            // not ignoring empty nodes they are counted
+            return (false,vec![]);
+        }
+
+        let mut child_output = vec![];
+        for child in tree.get_children(node_ref).iter(){
+            child_output.push(get_monophyletic_groups(tree, *child, key, &target_annotation))
+        }
+        let am_i_a_root = child_output.iter().map(|t|t.0).fold(true,|acc,b |acc&b);
+        if am_i_a_root {
+            let combined_child_tips = child_output.into_iter()
+                .map(|t|t.1)
+                .flatten()
+                .flatten()
+                .collect::<Vec<TreeIndex>>();
+            return (true,vec![combined_child_tips]);
+        }else{
+            let child_tips = child_output.into_iter()
+                .map(|t|t.1)
+                .fold(vec![],|mut acc, next |{
+                acc.extend(next);
+                return acc
+            } );
+            return(false,child_tips)
+        }
+
+    }
 
     fn pick_random_tip(tree: &MutableTree, node: TreeIndex)->TreeIndex {
         let kids = tree.get_num_children(node);
