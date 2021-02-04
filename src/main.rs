@@ -3,7 +3,7 @@ mod commands;
 use rebl::tree::mutable_tree::{MutableTree};
 use structopt::StructOpt;
 use rebl::io::parser::newick_parser::NewickParser;
-use commands::{stats,annotate};
+use commands::{stats,annotate,extract};
 use std::path;
 
 #[macro_use]
@@ -18,7 +18,7 @@ enum Fertree {
         #[structopt(flatten)]
         common: Common,
         #[structopt(subcommand)]
-        cmd: Option<stats::StatsSubCommands>,
+        cmd: Option<stats::SubCommands>,
     },
     Introductions{
         #[structopt(flatten)]
@@ -32,9 +32,11 @@ enum Fertree {
         #[structopt(short, long, parse(from_os_str), help = "trait csv with taxa labels as frist field")]
         traits: path::PathBuf,
     },
-    ExtractAnnotations {
+    Extract {
         #[structopt(flatten)]
         common: Common,
+        #[structopt(subcommand)]
+        cmd: extract::SubCommands,
     }
 }
 
@@ -66,6 +68,9 @@ fn main() {
         },
        Fertree::Annotate{common,traits}=>{
            annotate::run(common,traits)
+       },
+       Fertree::Extract{common,cmd} =>{
+           extract::run(common,cmd)
        }
         Fertree::Introductions { common, to }=>{
             Ok(())

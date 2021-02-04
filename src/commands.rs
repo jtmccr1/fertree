@@ -118,6 +118,86 @@ pub(crate) mod annotate{
     }
 }
 
+pub mod extract {
+    use crate::Common;
+    use structopt::StructOpt;
+    use std::error::Error;
+    use crate::commands::command_io;
+    use std::io::{self, Write};
+    use rebl::io::writer::newick_writer;
+    use std::borrow::Borrow;
+    use rebl::io::parser::newick_parser::AnnotationValue;
+
+
+    #[derive(Debug, StructOpt)]
+    pub enum SubCommands {
+        Taxa,
+        Annotations
+    }
+
+    pub fn run(common: Common, cmd: SubCommands) -> Result<(), Box<dyn Error>> {
+        match cmd {
+            SubCommands::Taxa => {
+                taxa(common)
+            },
+            SubCommands::Annotations => {
+                annotations(common)
+            }
+        }
+    }
+
+    fn taxa(common: Common) -> Result<(), Box<dyn Error>> {
+        let stdout = std::io::stdout(); // get the global stdout entity
+        let mut handle = stdout.lock(); // acquire a lock on it
+        let trees = command_io::parse_tree_input(common.infile)?;
+        for tree in trees.iter() {
+            let mut i = 0;
+            while i < tree.get_external_node_count() {
+                if let Some(tip) = tree.get_external_node(i) {
+                    if let Some(taxa) = &tip.taxon {
+                        writeln!(handle, "{}", taxa)?;
+                    }
+                }
+                i += 1;
+            }
+        }
+        Ok(())
+    }
+
+    fn annotations(common: Common) -> Result<(), Box<dyn Error>> {
+        let stdout = std::io::stdout(); // get the global stdout entity
+        let mut handle = stdout.lock(); // acquire a lock on it
+        let trees = command_io::parse_tree_input(common.infile)?;
+        for tree in trees.iter() {
+            let header = tree.annotation_type.keys().map(|k| k.clone()).collect::<Vec<String>>().join("\t");
+            writeln!(handle, "{}\t{}","taxa", header)?;
+            for node_ref in tree.external_nodes.iter() {
+                let annotation_string = tree.annotation_type.keys()
+                    .map(|k| annotation_value_string(tree.get_annotation(*node_ref, k)))
+                    .collect::<Vec<String>>()
+                    .join("\t");
+                if let Some(taxa) = tree.get_taxon(*node_ref){
+                    writeln!(handle, "{}\t{}",taxa , annotation_string)?;
+                }else{
+                    writeln!(handle, "{}\t{}","" , annotation_string)?;
+                }
+
+            }
+        }
+        Ok(())
+    }
+
+    fn annotation_value_string(value: Option<&AnnotationValue>) -> String {
+        if let Some(annotation) = value {
+            let value_string = annotation.to_string();
+            format!("{}", value_string)
+        } else {
+            "".to_string()
+        }
+    }
+}
+
+
 mod split{
     
 }
@@ -129,27 +209,11 @@ pub(crate) mod stats{
     use std::error::Error;
 
     #[derive(Debug, StructOpt)]
-    pub enum StatsSubCommands {
+    pub enum SubCommands {
         Tips,
     }
 
-    fn tips(common:Common)->Result<(),Box<dyn Error>>{
-        let stdout = std::io::stdout(); // get the global stdout entity
-        let mut handle = stdout.lock(); // acquire a lock on it
-        let trees = command_io::parse_tree_input(common.infile)?;
-        for tree in trees.iter(){
-            let mut i =0;
-            while i<tree.get_external_node_count(){
-                if let Some(tip)=tree.get_external_node(i){
-                    if let Some(taxa)= &tip.taxon{
-                        writeln!(handle, "{}", taxa)?;
-                    }
-                }
-                i+=1;
-            }
-        }
-        Ok(())
-    }
+
     fn general_stats(common:Common)->Result<(),Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
@@ -179,17 +243,18 @@ pub(crate) mod stats{
         }
         Ok(())
     }
-    pub fn run(common:Common, cmd:Option<StatsSubCommands>)->Result<(),Box<dyn Error>>{
+    pub fn run(common:Common, cmd:Option<SubCommands>) ->Result<(),Box<dyn Error>>{
         //TODO move tree reading and output buffer handling out here and pass to commands
 
         match cmd {
-            Some(StatsSubCommands::Tips) =>{
-                tips(common)
-            },
             None =>{
               general_stats(common)
             }
 
+            _ => {
+                warn!("nothing done");
+                Ok(())
+            }
         }
     }
 }

@@ -31,14 +31,14 @@ impl MutableTreeNode {
 }
 
 pub struct MutableTree {
-    nodes: Vec<MutableTreeNode>,
-    external_nodes: Vec<TreeIndex>,
-    internal_nodes: Vec<TreeIndex>,
-    annotation_type: HashMap<String, AnnotationValue>,
-    taxon_node_map: HashMap<String, TreeIndex>,
-    root: Option<TreeIndex>,
-    heights_known: bool,
-    branchlengths_known: bool,
+    pub nodes: Vec<MutableTreeNode>,
+    pub external_nodes: Vec<TreeIndex>,
+    pub internal_nodes: Vec<TreeIndex>,
+    pub annotation_type: HashMap<String, AnnotationValue>,
+    pub taxon_node_map: HashMap<String, TreeIndex>,
+    pub root: Option<TreeIndex>,
+    pub heights_known: bool,
+    pub branchlengths_known: bool,
 
 }
 
@@ -314,7 +314,7 @@ impl MutableTree {
         return self.get_node_mut(index).expect(&*format!("node {} not in tree", index));
     }
 
-    pub(crate) fn get_taxon(&self, node_ref:TreeIndex) ->Option<&str>{
+    pub fn get_taxon(&self, node_ref:TreeIndex) ->Option<&str>{
         let node = self.get_unwrapped_node(node_ref);
         if let Some(taxon) = &node.taxon{
             Some(taxon.as_str())
@@ -436,6 +436,7 @@ impl MutableTree {
     pub fn get_annotation(&self, index: TreeIndex, key: &str) -> Option<&AnnotationValue> {
         return self.get_unwrapped_node(index).annotations.get(key);
     }
+    //TODO public members or getter/setter?
     pub fn get_annotation_keys(&self) -> Keys<'_, String, AnnotationValue> {
         self.annotation_type.keys()
     }

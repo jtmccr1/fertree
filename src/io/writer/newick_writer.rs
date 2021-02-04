@@ -60,7 +60,7 @@ fn write_annotations(tree: &MutableTree, node_ref: TreeIndex) ->String{
     s
 }
 
-fn write_annotation(key: &String, value: Option<&AnnotationValue>) -> String {
+pub fn write_annotation(key: &String, value: Option<&AnnotationValue>) -> String {
     if let Some(annotation) = value {
         let value_string =annotation.to_string();
         format!("{}={}", key, value_string)

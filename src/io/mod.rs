@@ -1,4 +1,4 @@
 pub mod parser;
 
-mod writer;
+pub mod writer;
 mod serialization;
