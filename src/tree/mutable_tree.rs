@@ -7,7 +7,7 @@ use std::collections::hash_map::Keys;
 pub type TreeIndex = usize;
 
 
-
+//TODO think more about missing data. Should these be options? Should they be guaranteed
 #[derive(Debug)]
 pub struct MutableTreeNode {
     pub taxon: Option<String>,
@@ -56,6 +56,8 @@ impl MutableTree {
         };
         tree.fixed_node_helper(root, None);
         tree.set_root(Some(0));
+        tree.branchlengths_known=true;
+        tree.calc_node_heights();
         return tree;
     }
 
@@ -71,7 +73,7 @@ impl MutableTree {
             self.set_label(index, label);
         }
 
-        if let Some(mut annotation_map) = node.annotations {
+        if let Some( annotation_map) = node.annotations {
             for (key, value) in annotation_map.into_iter() {
                 self.annotate_node(index, key, value);
             }
@@ -108,6 +110,7 @@ impl MutableTree {
         let root = tree.get_root().expect("every tree should have a root at least nominally");
         me.tree_helper(tree, root, taxa);
         me.heights_known=true;
+        me.calculate_branchlengths();
         me
     }
 
@@ -203,10 +206,10 @@ impl MutableTree {
 
 
     fn calc_height_above_root(&mut self) {
-        let mut preorder = self.preorder_iter();
+        let  preorder = self.preorder_iter();
         for node_ref in preorder {
             if let Some(p) = self.get_parent(node_ref) {
-                let l = self.get_length(node_ref).expect("tree needs lengths to get heights");
+                let l = self.get_length(node_ref).expect(&*format!("no length on node {}",node_ref));
                 let pheight = self.get_height(p);
                 self.set_height(node_ref, l + pheight);
             } else {
@@ -460,10 +463,7 @@ impl MutableTree {
         self.annotation_type.keys()
     }
     pub fn is_external(&self, node_ref:TreeIndex)->bool{
-        match self.get_unwrapped_node(node_ref).first_child{
-            Some(node)=>false,
-            None=>true
-        }
+         self.get_unwrapped_node(node_ref).first_child.is_none()
     }
     pub fn get_root(&self) -> Option<TreeIndex> {
         self.root
@@ -473,7 +473,7 @@ impl MutableTree {
             let value_type = std::mem::discriminant(&value);
             let annotation_type = std::mem::discriminant(annotation);
             if value_type == annotation_type {
-                let mut node = self.get_unwrapped_node_mut(index);
+                let  node = self.get_unwrapped_node_mut(index);
                 node.annotations.insert(key, value);
             } else {
                 panic!("tried to annotate node with an missmatched annotation type");
@@ -491,7 +491,7 @@ impl MutableTree {
                     self.annotation_type.insert(key.clone(), AnnotationValue::Set(vec![AnnotationValue::Discrete("0".to_string())]));
                 }
             }
-            let mut node = self.get_unwrapped_node_mut(index);
+            let  node = self.get_unwrapped_node_mut(index);
             node.annotations.insert(key, value);
         }
     }
@@ -519,9 +519,9 @@ pub struct PreOrderIterator {
 
 impl PreOrderIterator {
     pub fn new(root: Option<TreeIndex>, tree: &MutableTree) -> Self {
-        let mut local_stack = vec![];
+        let mut local_stack:Vec<TreeIndex>;
         if let Some(index) = root {
-            local_stack = vec![index];
+             local_stack = vec![index];
         } else {
             let root = tree.get_root().expect("each tree should have a root");
             local_stack = vec![root];

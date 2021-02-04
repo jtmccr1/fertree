@@ -17,30 +17,29 @@ mod thin{
 pub(crate) mod collapse{
     use rebl::tree::mutable_tree::{MutableTree, TreeIndex};
     use std::collections::HashSet;
-    use rand::Rng;
     use rebl::io::parser::newick_parser::AnnotationValue;
     use crate::Common;
     use crate::commands::command_io;
     use std::error::Error;
-    use std::io::{self, Write};
+    use std::io::{Write};
+    use rand::seq::SliceRandom;
+//TODO set random seed.
 
-
-
-    pub fn run(common: Common,key:String,value:String)->Result<(),Box<dyn Error>> {
+    pub fn run(common: Common,key:String,value:String,min_size:usize)->Result<(),Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
 
         let mut trees = command_io::parse_tree_input(common.infile)?;
         for tree in trees.iter_mut(){
             tree.calc_node_heights();
-            let  new_tree = collapse_uniform_clades(tree, &key, &value);
+            let  new_tree = collapse_uniform_clades(tree, &key, &value,min_size);
             writeln!(handle, "{}", new_tree)?;
 
         }
         Ok(())
     }
 
-    pub  fn collapse_uniform_clades(tree:&MutableTree,key:&String,value: &String) ->MutableTree{
+    pub  fn collapse_uniform_clades(tree:&MutableTree,key:&String,value: &String,min_size:usize) ->MutableTree{
         let mut taxa:HashSet<String> = tree.external_nodes.iter()
             .map(|node|tree.get_taxon(*node)).map(|n|String::from(n.unwrap())).collect();
 
@@ -48,16 +47,18 @@ pub(crate) mod collapse{
         if monophyletic_groups.0{
             warn!("The whole tree is a monophyletic clade!")
         }
+        let mut removed = 0;
         for group in monophyletic_groups.1.iter(){
-            //pick one to keep
-            // remove the rest
-            for node in group.iter(){
+            let mut rng = &mut rand::thread_rng();
+
+            for node in group.choose_multiple(&mut rng,group.len()-min_size){
                 let taxon = tree.get_taxon(*node).expect("This is not external node!");
                 taxa.remove(taxon);
+                removed +=1;
             }
         }
-        let mut new_tree = MutableTree::from_tree(tree,&taxa);
-        new_tree.calculate_branchlengths();
+        info!("Removed : {} taxa", removed);
+        let  new_tree = MutableTree::from_tree(tree,&taxa);
         new_tree
     }
 
@@ -103,14 +104,6 @@ pub(crate) mod collapse{
 
     }
 
-    fn pick_random_tip(tree: &MutableTree, node: TreeIndex)->TreeIndex {
-        let kids = tree.get_num_children(node);
-        if kids==0{
-            return node;
-        }
-        let next_kid = rand::thread_rng().gen_range(0..kids);
-        return pick_random_tip(tree,tree.get_child(node, next_kid).expect("child out of range"))
-    }
 }
 
 pub(crate) mod annotate{
@@ -120,7 +113,7 @@ pub(crate) mod annotate{
     use crate::Common;
     use std::path;
     use std::error::Error;
-    use std::io::{self, Write};
+    use std::io::{ Write};
     use crate::commands::command_io::parse_csv;
     use crate::commands::command_io;
     use csv::Reader;
@@ -135,7 +128,7 @@ pub(crate) mod annotate{
 
         let mut trees = command_io::parse_tree_input(common.infile)?;
         for tree in trees.iter_mut(){
-            annotate_tips(tree, &mut reader);
+            annotate_tips(tree, &mut reader)?;
             writeln!(handle, "{}", tree)?;
         }
 
@@ -174,9 +167,7 @@ pub mod extract {
     use structopt::StructOpt;
     use std::error::Error;
     use crate::commands::command_io;
-    use std::io::{self, Write};
-    use rebl::io::writer::newick_writer;
-    use std::borrow::Borrow;
+    use std::io::{ Write};
     use rebl::io::parser::newick_parser::AnnotationValue;
 
 
@@ -256,7 +247,7 @@ pub(crate) mod stats{
     use structopt::StructOpt;
     use crate::{Common};
     use super::command_io;
-    use std::io::{self, Write};
+    use std::io::{ Write};
     use std::error::Error;
 
     #[derive(Debug, StructOpt)]
@@ -314,13 +305,11 @@ mod command_io {
     use std::{path, io};
     use rebl::tree::mutable_tree::MutableTree;
     use std::fs::File;
-    use std::io::{BufReader, BufRead, stdout, Write, BufWriter};
-    use rebl::io::parser::newick_parser::{NewickParser, AnnotationValue};
-    use std::path::Path;
-    use std::collections::HashMap;
+    use std::io::{BufReader, BufRead};
+    use rebl::io::parser::newick_parser::{NewickParser};
     use std::error::Error;
     use csv::Reader;
-
+    //TODO use iterator to read 1 line at a time
     pub fn parse_tree_input(input: Option<path::PathBuf>) -> Result<Vec<MutableTree>, io::Error> {
         let mut trees = vec![];
         match input {

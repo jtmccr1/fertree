@@ -1,10 +1,10 @@
 // Needed by pest
 use pest_consume::{match_nodes, Error, Parser};
 use std::collections::HashMap;
-use crate::tree::mutable_tree::MutableTree;
 use crate::tree::fixed_tree::FixedNode;
-use serde::{Serialize, Deserialize};
+use serde::{ Deserialize};
 use std::fmt;
+use log::{info, warn};
 
 
 
@@ -74,9 +74,18 @@ impl NewickParser {
             n},
             [subtree(mut n),node_annotation(a)]=>{
             n.annotations=Some(a);
-            n},
+            n.length=Some(0.0);
+            //TODO warn about this
+            // warn!("branchlength 0 inserted for branch without length");
+            n
+            },
             [subtree(mut n),length(l)]=>{n.length=Some(l);n},
-            [subtree(n)]=>n
+            [subtree(mut n)]=>{
+            n.length=Some(0.0);
+            //TODO warn about this
+            // warn!("branchlength 0 inserted for branch without length")
+            n
+            }
         ))
     }
     fn annotation(input:Node)-> Result<(String,AnnotationValue)>{
@@ -205,9 +214,9 @@ impl NewickParser {
 impl NewickParser {
     pub fn parse_tree(str: &str) -> Result<FixedNode> {
         let start = std::time::Instant::now();
-        let inputs = NewickParser::parse(Rule::tree, str).unwrap();
+        let inputs = NewickParser::parse(Rule::tree, str)?;
 // There should be a single root node in the parsed tree
-        let input = inputs.single().unwrap();
+        let input = inputs.single()?;
 // Consume the `Node` recursively into the final value
         let root = NewickParser::tree(input);
         // let start = std::time::Instant::now();

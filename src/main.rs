@@ -1,8 +1,6 @@
 mod commands;
 
-use rebl::tree::mutable_tree::{MutableTree};
 use structopt::StructOpt;
-use rebl::io::parser::newick_parser::NewickParser;
 use commands::{stats,annotate,extract,collapse};
 use std::path;
 
@@ -11,7 +9,7 @@ extern crate log;
 
 
 #[derive(Debug, StructOpt)]
-#[structopt(about = "command line tools for processing phylogenetic trees in rust")]
+#[structopt(about = "command line tools for processing phylogenetic trees in rust",rename_all = "kebab-case")]
 //TODO reformat these for better api
 enum Fertree {
     Stats {
@@ -44,7 +42,9 @@ enum Fertree {
         #[structopt(short, long, help = "annotation key we are collapsing by. must be discrete")]
         annotation: String,
         #[structopt(short, long, help = "annotation value we are collapsing by")]
-        value:String
+        value:String,
+        #[structopt(short, long, help = "the minimum clade size",default_value="1")]
+        min_size:usize
     }
 }
 
@@ -65,6 +65,7 @@ pub struct Common {
 }
 
 fn main() {
+    //TODO change env variable
     env_logger::init();
     trace!("starting up");
     let args = Fertree::from_args();
@@ -80,8 +81,8 @@ fn main() {
        Fertree::Extract{common,cmd} =>{
            extract::run(common,cmd)
        },
-       Fertree::Collapse {common, annotation,value}=>{
-           collapse::run(common,annotation,value)
+       Fertree::Collapse {common, annotation,value,min_size}=>{
+           collapse::run(common,annotation,value,min_size)
        }
 
         Fertree::Introductions { common, to }=>{
