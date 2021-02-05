@@ -1,66 +1,74 @@
 mod commands;
 
 use structopt::StructOpt;
-use commands::{stats,annotate,extract,collapse};
-use std::path;
+use commands::{stats, annotate, extract, collapse, command_io};
+use std::{path, io};
+use crate::commands::command_io::NewickImporter;
+use std::io::Error;
 
 #[macro_use]
 extern crate log;
 
 
 #[derive(Debug, StructOpt)]
-#[structopt(about = "command line tools for processing phylogenetic trees in rust",rename_all = "kebab-case")]
-//TODO reformat these for better api
+#[structopt(about = "command line tools for processing phylogenetic trees in rust", rename_all = "kebab-case")]
+struct Cli {
+    #[structopt(flatten)]
+    common: Common,
+    #[structopt(subcommand)]
+    cmd: Fertree,
+}
+
+#[derive(Debug, StructOpt)]
 enum Fertree {
     Stats {
-        #[structopt(flatten)]
-        common: Common,
+        // #[structopt(flatten)]
+        // common: Common,
         #[structopt(subcommand)]
         cmd: Option<stats::SubCommands>,
     },
-    Introductions{
-        #[structopt(flatten)]
-        common: Common,
+    Introductions {
+        // #[structopt(flatten)]
+        // common: Common,
         #[structopt(short, long)]
-        to:String,
+        to: String,
     },
-    Annotate{
-        #[structopt(flatten)]
-        common: Common,
+    Annotate {
+        // #[structopt(flatten)]
+        // common: Common,
         #[structopt(short, long, parse(from_os_str), help = "trait csv with taxa labels as first field")]
         traits: path::PathBuf,
     },
     Extract {
-        #[structopt(flatten)]
-        common: Common,
+        // #[structopt(flatten)]
+        // common: Common,
         #[structopt(subcommand)]
         cmd: extract::SubCommands,
     },
-    Collapse{
-        #[structopt(flatten)]
-        common: Common,
+    Collapse {
+        // #[structopt(flatten)]
+        // common: Common,
         #[structopt(short, long, help = "annotation key we are collapsing by. must be discrete")]
         annotation: String,
         #[structopt(short, long, help = "annotation value we are collapsing by")]
-        value:String,
-        #[structopt(short, long, help = "the minimum clade size",default_value="1")]
-        min_size:usize
-    }
+        value: String,
+        #[structopt(short, long, help = "the minimum clade size", default_value = "1")]
+        min_size: usize,
+    },
 }
-
 
 
 #[derive(Debug, StructOpt)]
 pub struct Common {
-    #[structopt(short, long, parse(from_os_str), help = "input tree file",global=true)]
+    #[structopt(short, long, parse(from_os_str), help = "input tree file", global = true)]
     infile: Option<path::PathBuf>,
-    #[structopt(short, long, parse(from_os_str), help = "output tree file",global=true)]
+    #[structopt(short, long, parse(from_os_str), help = "output tree file", global = true)]
     outfile: Option<path::PathBuf>,
-    #[structopt(short, long,global=true)]
+    #[structopt(short, long, global = true)]
     release: bool,
     //TODO implement this log file option
-    #[structopt(short, long, parse(from_os_str), help = "logfile",global=true)]
-    logfile: Option<path::PathBuf>
+    #[structopt(short, long, parse(from_os_str), help = "logfile", global = true)]
+    logfile: Option<path::PathBuf>,
     //TODO include verbosity flag here to overwrite env_logger
 }
 
@@ -68,34 +76,41 @@ fn main() {
     //TODO change env variable
     env_logger::init();
     trace!("starting up");
-    let args = Fertree::from_args();
-    debug!("{:?}",args);
+    let args = Cli::from_args();
+    debug!("{:?}", args);
     let start = std::time::Instant::now();
-   let result =  match Fertree::from_args() {
-        Fertree::Stats { common, cmd } => {
-            stats::run(common, cmd)
-        },
-       Fertree::Annotate{common,traits}=>{
-           annotate::run(common,traits)
-       },
-       Fertree::Extract{common,cmd} =>{
-           extract::run(common,cmd)
-       },
-       Fertree::Collapse {common, annotation,value,min_size}=>{
-           collapse::run(common,annotation,value,min_size)
-       }
-
-        Fertree::Introductions { common, to }=>{
-            Ok(())
-        },
-       (_)=>{
-           warn!("not implemented");
-           Ok(())
-       }
-
+    let stdin = io::stdin();
+    let tree_importer = match args.common.infile {
+        Some(path) => command_io::NewickImporter::from_path(path).expect("Error reading file"),
+        None => {
+            command_io::NewickImporter::from_console(&stdin)
+        }
     };
-    info!("{} seconds elapsed",start.elapsed().as_secs());
-    match result{
+
+    let result = match args.cmd {
+        Fertree::Stats { cmd } => {
+            stats::run(tree_importer, cmd)
+        }
+        Fertree::Annotate { traits } => {
+            annotate::run(tree_importer, traits)
+        }
+        Fertree::Extract { cmd } => {
+            extract::run(tree_importer, cmd)
+        }
+        Fertree::Collapse { annotation, value, min_size } => {
+            collapse::run(tree_importer, annotation, value, min_size)
+        }
+
+        // Fertree::Introductions { tree_importer, to }=>{
+        //     Ok(())
+        // },
+        (_) => {
+            warn!("not implemented");
+            Ok(())
+        }
+    };
+    info!("{} seconds elapsed", start.elapsed().as_secs());
+    match result {
         Ok(_) => {
             std::process::exit(exitcode::OK);
         }
@@ -104,4 +119,8 @@ fn main() {
             std::process::exit(exitcode::IOERR);
         }
     }
+
 }
+
+
+

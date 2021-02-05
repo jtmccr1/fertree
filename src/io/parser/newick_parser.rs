@@ -221,7 +221,7 @@ impl NewickParser {
         let root = NewickParser::tree(input);
         // let start = std::time::Instant::now();
         // let tree= MutableTree::from_fixed_node(root);
-        trace!("{} Tree parsed in ",start.elapsed().as_secs());
+        trace!("Tree parsed in {} seconds ",start.elapsed().as_secs());
         root
         // Ok(tree)
     }
