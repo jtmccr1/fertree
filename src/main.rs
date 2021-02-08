@@ -1,10 +1,9 @@
 mod commands;
 
 use structopt::StructOpt;
-use commands::{stats, annotate, extract, collapse, command_io};
+use commands::{stats, annotate, extract, collapse};
+use rebl::io::parser::newick_importer;
 use std::{path, io};
-use crate::commands::command_io::NewickImporter;
-use std::io::Error;
 
 #[macro_use]
 extern crate log;
@@ -81,9 +80,9 @@ fn main() {
     let start = std::time::Instant::now();
     let stdin = io::stdin();
     let tree_importer = match args.common.infile {
-        Some(path) => command_io::NewickImporter::from_path(path).expect("Error reading file"),
+        Some(path) => newick_importer::NewickImporter::from_path(path).expect("Error reading file"),
         None => {
-            command_io::NewickImporter::from_console(&stdin)
+            newick_importer::NewickImporter::from_console(&stdin)
         }
     };
 
@@ -104,7 +103,7 @@ fn main() {
         // Fertree::Introductions { tree_importer, to }=>{
         //     Ok(())
         // },
-        (_) => {
+        _ => {
             warn!("not implemented");
             Ok(())
         }

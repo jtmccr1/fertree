@@ -2,9 +2,8 @@
 use pest_consume::{match_nodes, Error, Parser};
 use std::collections::HashMap;
 use crate::tree::fixed_tree::FixedNode;
-use serde::{ Deserialize};
-use std::fmt;
-use log::{info, warn};
+use crate::tree::AnnotationValue;
+
 
 
 
@@ -15,29 +14,6 @@ pub struct NewickParser;
 type Result<T> = std::result::Result<T, Error<Rule>>;
 type Node<'i> = pest_consume::Node<'i, Rule, ()>;
 
-#[derive(Debug,Clone,Deserialize)]
-#[serde(untagged)]
-
-pub enum AnnotationValue{
-    Discrete(String),
-    Continuous(f64),
-    Set(Vec<AnnotationValue>)
-}
-
-impl fmt::Display for AnnotationValue {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            AnnotationValue::Discrete(string)=>write!(f,"{}",string),
-            AnnotationValue:: Continuous(f64)=>write!(f,"{}",f64.to_string()),
-            AnnotationValue::Set(s)=>{
-                let s = s.iter().map(|a| a.to_string())
-                    .collect::<Vec<String>>()
-                    .join(",");
-                write!(f,"{{ {} }}",s)
-            }
-        }
-    }
-}
 
 #[pest_consume::parser]
 impl NewickParser {
@@ -75,15 +51,13 @@ impl NewickParser {
             [subtree(mut n),node_annotation(a)]=>{
             n.annotations=Some(a);
             n.length=Some(0.0);
-            //TODO warn about this
-            // warn!("branchlength 0 inserted for branch without length");
+            warn!("branchlength 0 inserted for branch without length");
             n
             },
             [subtree(mut n),length(l)]=>{n.length=Some(l);n},
             [subtree(mut n)]=>{
             n.length=Some(0.0);
-            //TODO warn about this
-            // warn!("branchlength 0 inserted for branch without length")
+            warn!("branchlength 0 inserted for branch without length");
             n
             }
         ))

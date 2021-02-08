@@ -1,5 +1,5 @@
 use crate::tree::mutable_tree::{MutableTree, TreeIndex};
-use crate::io::parser::newick_parser::AnnotationValue;
+use crate::tree::AnnotationValue;
 use std::fmt;
 
 impl fmt::Display for MutableTree {

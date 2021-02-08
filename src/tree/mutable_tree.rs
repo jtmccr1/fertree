@@ -1,7 +1,7 @@
 use std::option::Option;
 use super::fixed_tree::FixedNode;
 use std::collections::{HashMap, HashSet};
-use crate::io::parser::newick_parser::AnnotationValue;
+use super::AnnotationValue;
 use std::collections::hash_map::Keys;
 
 pub type TreeIndex = usize;
