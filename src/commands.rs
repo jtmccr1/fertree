@@ -242,102 +242,115 @@ pub mod split {
     use rebl::io::parser::newick_importer;
     use rebl::tree::mutable_tree::{MutableTree, TreeIndex};
     use std::error::Error;
-    use std::collections::{ HashSet};
+    use std::collections::{HashSet};
     use std::io::Write;
 
-    #[derive(Debug)]
+    #[derive(Debug,PartialEq)]
     struct Subtree {
-        root:TreeIndex,
-        tips:usize,
+        root: TreeIndex,
+        tips: usize,
+        level: usize,
     }
-
 
 
     struct SubtreeSearcher {
         tree: MutableTree,
         subtrees: Vec<Subtree>,
+        strict: bool,
     }
-    impl SubtreeSearcher{
-        fn collate_subtrees(&mut self, min_size:usize){
-            let root= self.tree.get_root().unwrap();
+
+    impl SubtreeSearcher {
+        fn collate_subtrees(&mut self, min_size: usize) {
+            let root = self.tree.get_root().unwrap();
             self.subtrees = vec![];
-            self.get_subtrees(root, min_size);
+            self.get_subtrees(root, min_size, 0);
         }
-        fn get_subtrees(&mut self, node:TreeIndex,min_size: usize )->usize{
+        fn get_subtrees(&mut self, node: TreeIndex, min_size: usize, level: usize) -> usize {
             return if self.tree.is_external(node) {
                 1
             } else {
                 let mut tips = 0;
                 for child in self.tree.get_children(node) {
-                    tips += self.get_subtrees(child, min_size);
+                    tips += self.get_subtrees(child, min_size, level + 1);
                 }
-                if tips >= min_size || Some(node) == self.tree.get_root() {
-                    let subtree = Subtree { root: node, tips };
+                if tips >= min_size {
+                    let subtree = Subtree { root: node, tips, level };
                     self.subtrees.push(subtree);
-                    return 0
+                    return 0;
+                } else if Some(node) == self.tree.get_root() {
+                    if self.strict && tips < min_size {
+                        let earliest_subtree = self.subtrees.iter()
+                            .fold(Subtree { root: usize::MAX, tips: usize::MIN, level: usize::MAX },
+                                  |a, b| return if a.level < b.level { a } else { *b });
+                        //if this is slow could make subtree mutable
+                        let new_tip_count = tips + earliest_subtree.tips;
+                        let root_subtree = Subtree { root: node, tips: tips + earliest_subtree.tips, level: level };
+                        //TODO error
+                        let index = self.subtrees.iter().position(|x| *x == earliest_subtree).expect("subtree not found");
+                        self.subtrees.swap_remove(index);
+                        self.subtrees.push(root_subtree);
+
+                        return new_tip_count;
+                    } else {
+                        let subtree = Subtree { root: node, tips, level };
+                        self.subtrees.push(subtree);
+                        return 0;
+                    }
                 }
                 tips
-            }
+            };
         }
 
-        fn finalize_selection(&mut self){
-            for subtree in self.subtrees.iter(){
-                if let Some(parent) = self.tree.get_parent(subtree.root){
-                    self.tree.remove_child(parent,subtree.root)
+        fn finalize_selection(&mut self) {
+            for subtree in self.subtrees.iter() {
+                if let Some(parent) = self.tree.get_parent(subtree.root) {
+                    self.tree.remove_child(parent, subtree.root)
                 }
             }
         }
     }
 
+
     pub fn run(trees: newick_importer::NewickImporter, min_clade_size: Option<usize>, explore: bool) -> Result<(), Box<dyn Error>> {
-
-
-
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
 
-        if explore && min_clade_size.is_some(){
+        if explore && min_clade_size.is_some() {
             warn!("min clade size will be ignored since explore flag is set. No trees will be written");
         }
         for parsed_tree in trees {
-            let  starting_tree = parsed_tree?;
+            let starting_tree = parsed_tree?;
             trace!("starting to split");
-            let mut searcher = SubtreeSearcher{tree:starting_tree,subtrees:vec![]};
+            let mut searcher = SubtreeSearcher { tree: starting_tree, subtrees: vec![],strict:true };
 
-            if explore{
-                writeln!(handle, "Exploring tree topology" )?;
+            if explore {
+                writeln!(handle, "Exploring tree topology")?;
                 let tip_count = searcher.tree.get_external_node_count();
                 let mut min_size = 4;
-                while min_size<tip_count {
+                while min_size < tip_count {
                     searcher.collate_subtrees(min_size);
-                    writeln!(handle,"cutoff of {} leads to {} trees", min_size, searcher.subtrees.len())?;
-                    min_size*=2;
+                    writeln!(handle, "cutoff of {} leads to {} trees", min_size, searcher.subtrees.len())?;
+                    min_size *= 2;
                 }
-
-            }else{
-                searcher.collate_subtrees( min_clade_size.expect("min-clade should be set to an integer"));
+            } else {
+                searcher.collate_subtrees(min_clade_size.expect("min-clade should be set to an integer"));
                 let taxa = &searcher.tree.external_nodes.iter()
                     .map(|n| searcher.tree.get_taxon(*n).unwrap().to_string()).collect::<HashSet<String>>();
                 searcher.finalize_selection();
                 info!("writing {} trees", searcher.subtrees.len());
 
-                for (i,subtree) in searcher.subtrees.iter().enumerate(){
+                for (i, subtree) in searcher.subtrees.iter().enumerate() {
                     info!("tree: {} - {} tips", i, subtree.tips);
                     debug!("{:?}", subtree);
                 }
-                for subtree in searcher.subtrees{
-                    let st = MutableTree::copy_subtree(&searcher.tree, subtree.root,taxa);
-                    writeln!(handle, "{}",st )?;
+                for subtree in searcher.subtrees {
+                    let st = MutableTree::copy_subtree(&searcher.tree, subtree.root, taxa);
+                    writeln!(handle, "{}", st)?;
                 }
             }
         }
         Ok(())
     }
-
-
-
-
-
 }
 
 pub(crate) mod stats {
