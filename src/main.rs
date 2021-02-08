@@ -4,6 +4,7 @@ use structopt::StructOpt;
 use commands::{stats, annotate, extract, collapse};
 use rebl::io::parser::newick_importer;
 use std::{path, io};
+use crate::commands::split;
 
 #[macro_use]
 extern crate log;
@@ -54,6 +55,17 @@ enum Fertree {
         #[structopt(short, long, help = "the minimum clade size", default_value = "1")]
         min_size: usize,
     },
+    Split {
+        // #[structopt(flatten)]
+        // common: Common,
+        // #[structopt(short, long, help = "annotation key we are collapsing by. must be discrete")]
+        // max_size: String,
+        // short and long flags (-d, --debug) will be deduced from the field's name
+        #[structopt(short, long, help = "Don't split tree but print the number of trees at different cut-offs")]
+        explore: bool,
+        #[structopt(short, long, help = "the minimum clade size",required_if("explore","true"))]
+        min_size: Option<usize>,
+    },
 }
 
 
@@ -98,6 +110,9 @@ fn main() {
         }
         Fertree::Collapse { annotation, value, min_size } => {
             collapse::run(tree_importer, annotation, value, min_size)
+        },
+        Fertree::Split {min_size,explore}=>{
+            split::run(tree_importer,min_size,explore)
         }
 
         // Fertree::Introductions { tree_importer, to }=>{

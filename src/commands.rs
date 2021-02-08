@@ -23,11 +23,11 @@ pub(crate) mod collapse {
     use rand::seq::SliceRandom;
 //TODO set random seed.
 
-    pub fn run( trees:    newick_importer::NewickImporter
-, key: String, value: String, min_size: usize) -> Result<(), Box<dyn Error>> {
+    pub fn run(trees: newick_importer::NewickImporter
+               , key: String, value: String, min_size: usize) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
-        for  parsed_tree in trees {
+        for parsed_tree in trees {
             let mut tree = parsed_tree?;
             tree.calc_node_heights();
             let new_tree = collapse_uniform_clades(&tree, &key, &value, min_size);
@@ -101,6 +101,7 @@ pub(crate) mod collapse {
     }
 }
 
+
 pub(crate) mod annotate {
     use rebl::tree::mutable_tree::MutableTree;
     use std::collections::HashMap;
@@ -115,14 +116,14 @@ pub(crate) mod annotate {
     use std::fs::File;
 
 
-    pub fn run(trees:    newick_importer::NewickImporter
-, traits: path::PathBuf) -> Result<(), Box<dyn Error>> {
+    pub fn run(trees: newick_importer::NewickImporter
+               , traits: path::PathBuf) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
 
         let mut reader = command_io::parse_csv(traits)?;
 
-        for  parsed_tree in trees {
+        for parsed_tree in trees {
             let mut tree = parsed_tree?;
             annotate_tips(&mut tree, &mut reader)?;
             writeln!(handle, "{}", tree)?;
@@ -173,8 +174,8 @@ pub mod extract {
         Annotations,
     }
 
-    pub fn run(trees:    newick_importer::NewickImporter
-, cmd: SubCommands) -> Result<(), Box<dyn Error>> {
+    pub fn run(trees: newick_importer::NewickImporter
+               , cmd: SubCommands) -> Result<(), Box<dyn Error>> {
         match cmd {
             SubCommands::Taxa => {
                 taxa(trees)
@@ -185,11 +186,11 @@ pub mod extract {
         }
     }
 
-    fn taxa(trees:    newick_importer::NewickImporter
-) -> Result<(), Box<dyn Error>> {
+    fn taxa(trees: newick_importer::NewickImporter
+    ) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
-        for  parsed_tree in trees {
+        for parsed_tree in trees {
             let tree = parsed_tree?;
             let mut i = 0;
             while i < tree.get_external_node_count() {
@@ -204,12 +205,12 @@ pub mod extract {
         Ok(())
     }
 
-    fn annotations(trees:    newick_importer::NewickImporter
-) -> Result<(), Box<dyn Error>> {
+    fn annotations(trees: newick_importer::NewickImporter
+    ) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
-        for  parsed_tree in trees {
-            let  tree = parsed_tree?;
+        for parsed_tree in trees {
+            let tree = parsed_tree?;
             let header = tree.annotation_type.keys().map(|k| k.clone()).collect::<Vec<String>>().join("\t");
             writeln!(handle, "{}\t{}", "taxa", header)?;
             for node_ref in tree.external_nodes.iter() {
@@ -237,8 +238,107 @@ pub mod extract {
     }
 }
 
+pub mod split {
+    use rebl::io::parser::newick_importer;
+    use rebl::tree::mutable_tree::{MutableTree, TreeIndex};
+    use std::error::Error;
+    use std::collections::{ HashSet};
+    use std::io::Write;
 
-mod split {}
+    #[derive(Debug)]
+    struct Subtree {
+        root:TreeIndex,
+        tips:usize,
+    }
+
+
+
+    struct SubtreeSearcher {
+        tree: MutableTree,
+        subtrees: Vec<Subtree>,
+    }
+    impl SubtreeSearcher{
+        fn collate_subtrees(&mut self, min_size:usize){
+            let root= self.tree.get_root().unwrap();
+            self.subtrees = vec![];
+            self.get_subtrees(root, min_size);
+        }
+        fn get_subtrees(&mut self, node:TreeIndex,min_size: usize )->usize{
+            return if self.tree.is_external(node) {
+                1
+            } else {
+                let mut tips = 0;
+                for child in self.tree.get_children(node) {
+                    tips += self.get_subtrees(child, min_size);
+                }
+                if tips >= min_size || Some(node) == self.tree.get_root() {
+                    let subtree = Subtree { root: node, tips };
+                    self.subtrees.push(subtree);
+                    return 0
+                }
+                tips
+            }
+        }
+
+        fn finalize_selection(&mut self){
+            for subtree in self.subtrees.iter(){
+                if let Some(parent) = self.tree.get_parent(subtree.root){
+                    self.tree.remove_child(parent,subtree.root)
+                }
+            }
+        }
+    }
+
+    pub fn run(trees: newick_importer::NewickImporter, min_clade_size: Option<usize>, explore: bool) -> Result<(), Box<dyn Error>> {
+
+
+
+        let stdout = std::io::stdout(); // get the global stdout entity
+        let mut handle = stdout.lock(); // acquire a lock on it
+
+        if explore && min_clade_size.is_some(){
+            warn!("min clade size will be ignored since explore flag is set. No trees will be written");
+        }
+        for parsed_tree in trees {
+            let  starting_tree = parsed_tree?;
+            trace!("starting to split");
+            let mut searcher = SubtreeSearcher{tree:starting_tree,subtrees:vec![]};
+
+            if explore{
+                writeln!(handle, "Exploring tree topology" )?;
+                let tip_count = searcher.tree.get_external_node_count();
+                let mut min_size = 4;
+                while min_size<tip_count {
+                    searcher.collate_subtrees(min_size);
+                    writeln!(handle,"cutoff of {} leads to {} trees", min_size, searcher.subtrees.len())?;
+                    min_size*=2;
+                }
+
+            }else{
+                searcher.collate_subtrees( min_clade_size.expect("min-clade should be set to an integer"));
+                let taxa = &searcher.tree.external_nodes.iter()
+                    .map(|n| searcher.tree.get_taxon(*n).unwrap().to_string()).collect::<HashSet<String>>();
+                searcher.finalize_selection();
+                info!("writing {} trees", searcher.subtrees.len());
+
+                for (i,subtree) in searcher.subtrees.iter().enumerate(){
+                    info!("tree: {} - {} tips", i, subtree.tips);
+                    debug!("{:?}", subtree);
+                }
+                for subtree in searcher.subtrees{
+                    let st = MutableTree::copy_subtree(&searcher.tree, subtree.root,taxa);
+                    writeln!(handle, "{}",st )?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+
+
+
+
+}
 
 pub(crate) mod stats {
     use structopt::StructOpt;
@@ -253,14 +353,14 @@ pub(crate) mod stats {
     }
 
 
-    fn general_stats(trees:    newick_importer::NewickImporter
-) -> Result<(), Box<dyn Error>> {
+    fn general_stats(trees: newick_importer::NewickImporter
+    ) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
         writeln!(handle, "nodes\tinternal\ttips\trootHeight\tsumbl\tmeanbl")?;
 
-        for  parsed_tree in trees {
-            let  tree = parsed_tree?;
+        for parsed_tree in trees {
+            let tree = parsed_tree?;
             let root = tree.get_root().unwrap();
             let root_height = tree.get_height(root);
             let nodes = tree.get_node_count();
@@ -284,8 +384,8 @@ pub(crate) mod stats {
         Ok(())
     }
 
-    pub fn run(trees:    newick_importer::NewickImporter
-, cmd: Option<SubCommands>) -> Result<(), Box<dyn Error>> {
+    pub fn run(trees: newick_importer::NewickImporter
+               , cmd: Option<SubCommands>) -> Result<(), Box<dyn Error>> {
         //TODO move tree reading and output buffer handling out here and pass to commands
 
         match cmd {
@@ -301,7 +401,7 @@ pub(crate) mod stats {
     }
 }
 
-pub  mod command_io {
+pub mod command_io {
     use std::path;
     use std::fs::File;
     use std::error::Error;

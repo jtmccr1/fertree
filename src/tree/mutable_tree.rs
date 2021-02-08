@@ -114,6 +114,22 @@ impl MutableTree {
         me
     }
 
+    pub fn copy_subtree(tree: & MutableTree,node:TreeIndex,taxa: &HashSet<String>) -> Self {
+        let mut me = MutableTree {
+            nodes: Vec::new(),
+            external_nodes: Vec::new(),
+            internal_nodes: Vec::new(),
+            annotation_type: HashMap::new(),
+            taxon_node_map: HashMap::new(),
+            root: None,
+            heights_known: false,
+            branchlengths_known: false,
+        };
+        me.tree_helper(tree, node, taxa);
+        me.heights_known=true;
+        me.calculate_branchlengths();
+        me
+    }
     fn tree_helper(&mut self, tree: & MutableTree, node: TreeIndex, taxa: &HashSet<String>) -> Option<TreeIndex> {
         let mut new_node = None;
         if tree.get_num_children(node) == 0 {
@@ -512,6 +528,7 @@ impl MutableTree {
         }
     }
 }
+//TODO I don't like that this is not lazy
 
 pub struct PreOrderIterator {
     stack: Vec<TreeIndex>
