@@ -191,13 +191,9 @@ impl NewickParser {
         let inputs = NewickParser::parse(Rule::tree, str)?;
 // There should be a single root node in the parsed tree
         let input = inputs.single()?;
-// Consume the `Node` recursively into the final value
         let root = NewickParser::tree(input);
-        // let start = std::time::Instant::now();
-        // let tree= MutableTree::from_fixed_node(root);
-        trace!("Tree parsed in {} seconds ",start.elapsed().as_secs());
+        trace!("Tree parsed in {} milli seconds ",start.elapsed().as_millis());
         root
-        // Ok(tree)
     }
 }
 

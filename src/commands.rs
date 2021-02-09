@@ -245,7 +245,7 @@ pub mod split {
     use std::collections::{HashSet};
     use std::io::Write;
 
-    #[derive(Debug,PartialEq)]
+    #[derive(Debug, PartialEq)]
     struct Subtree {
         root: TreeIndex,
         tips: usize,
@@ -280,13 +280,24 @@ pub mod split {
                 } else if Some(node) == self.tree.get_root() {
                     if self.strict && tips < min_size {
                         let earliest_subtree = self.subtrees.iter()
-                            .fold(Subtree { root: usize::MAX, tips: usize::MIN, level: usize::MAX },
-                                  |a, b| return if a.level < b.level { a } else { *b });
+                            .fold(&Subtree { root: usize::MAX, tips: usize::MIN, level: usize::MAX },
+                                  |a, b|{
+                                      return if a.level < b.level {
+                                          a
+                                      } else if b.level<a.level{
+                                          b
+                                      }else if a.tips<b.tips{
+                                          a
+                                      }else{
+                                          b
+                                      }
+                                  });
+
                         //if this is slow could make subtree mutable
                         let new_tip_count = tips + earliest_subtree.tips;
                         let root_subtree = Subtree { root: node, tips: tips + earliest_subtree.tips, level: level };
                         //TODO error
-                        let index = self.subtrees.iter().position(|x| *x == earliest_subtree).expect("subtree not found");
+                        let index = self.subtrees.iter().position(|x| *x == *earliest_subtree).expect("subtree not found");
                         self.subtrees.swap_remove(index);
                         self.subtrees.push(root_subtree);
 
@@ -311,19 +322,19 @@ pub mod split {
     }
 
 
-    pub fn run(trees: newick_importer::NewickImporter, min_clade_size: Option<usize>, explore: bool) -> Result<(), Box<dyn Error>> {
+    pub fn run(trees: newick_importer::NewickImporter, min_clade_size: Option<usize>, explore: bool, strict: bool) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
 
         if explore && min_clade_size.is_some() {
-            warn!("min clade size will be ignored since explore flag is set. No trees will be written");
+            warn!("Because explore is set. No trees will be written");
         }
         for parsed_tree in trees {
             let starting_tree = parsed_tree?;
             trace!("starting to split");
-            let mut searcher = SubtreeSearcher { tree: starting_tree, subtrees: vec![],strict:true };
+            let mut searcher = SubtreeSearcher { tree: starting_tree, subtrees: vec![], strict };
 
-            if explore {
+            if explore && min_clade_size.is_none() {
                 writeln!(handle, "Exploring tree topology")?;
                 let tip_count = searcher.tree.get_external_node_count();
                 let mut min_size = 4;
@@ -337,15 +348,25 @@ pub mod split {
                 let taxa = &searcher.tree.external_nodes.iter()
                     .map(|n| searcher.tree.get_taxon(*n).unwrap().to_string()).collect::<HashSet<String>>();
                 searcher.finalize_selection();
-                info!("writing {} trees", searcher.subtrees.len());
+                info!("found {} trees", searcher.subtrees.len());
+
+                if explore{
+                    writeln!(handle,"tree\ttips")?;
+                }
 
                 for (i, subtree) in searcher.subtrees.iter().enumerate() {
-                    info!("tree: {} - {} tips", i, subtree.tips);
+                    if explore{
+                        writeln!(handle,"{}\t{}",i,subtree.tips)?;
+                    }else {
+                        info!("tree: {} - {} tips", i, subtree.tips);
+                    }
                     debug!("{:?}", subtree);
                 }
-                for subtree in searcher.subtrees {
-                    let st = MutableTree::copy_subtree(&searcher.tree, subtree.root, taxa);
-                    writeln!(handle, "{}", st)?;
+                if !explore {
+                    for subtree in searcher.subtrees {
+                        let st = MutableTree::copy_subtree(&searcher.tree, subtree.root, taxa);
+                        writeln!(handle, "{}", st)?;
+                    }
                 }
             }
         }
