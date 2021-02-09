@@ -4,9 +4,7 @@ use std::fmt;
 
 impl fmt::Display for MutableTree {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let start = std::time::Instant::now();
         let s = write_newick(self);
-        trace!("Tree string built in {} seconds ",start.elapsed().as_secs());
         write!(f,"{}",s)
     }
 }

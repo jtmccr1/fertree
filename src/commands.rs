@@ -170,7 +170,9 @@ pub mod extract {
 
     #[derive(Debug, StructOpt)]
     pub enum SubCommands {
+        /// Extract a list of the taxa names
         Taxa,
+        /// Extract a tsv of the tip anotations
         Annotations,
     }
 
