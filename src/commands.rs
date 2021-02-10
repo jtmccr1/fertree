@@ -22,7 +22,6 @@ pub(crate) mod collapse {
     use std::io::{Write};
     use rand::seq::SliceRandom;
 //TODO set random seed.
-
     pub fn run(trees: newick_importer::NewickImporter
                , key: String, value: String, min_size: usize) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
@@ -74,7 +73,7 @@ pub(crate) mod collapse {
                 }
             }
             // not ignoring empty nodes they are counted
-            return (false, vec![]);
+            panic!("Annotation not found on a tip. all tips must be annotated")
         }
 
         let mut child_output = vec![];
@@ -121,9 +120,10 @@ pub(crate) mod annotate {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
 
-        let mut reader = command_io::parse_csv(traits)?;
 
         for parsed_tree in trees {
+            //TODO avoid parsing at each loop
+            let mut reader = command_io::parse_tsv(&traits)?;
             let mut tree = parsed_tree?;
             annotate_tips(&mut tree, &mut reader)?;
             writeln!(handle, "{}", tree)?;
@@ -140,7 +140,6 @@ pub(crate) mod annotate {
 
         for result in reader.deserialize() {
             let record: Record = result?;
-            //See todo above
             if let Some(AnnotationValue::Discrete(taxon)) = record.get(&*taxon_key).unwrap() {
                 if let Some(node_ref) = tree.get_taxon_node(&taxon) {
                     for (key, value) in record {
@@ -280,7 +279,7 @@ pub mod split {
                     self.subtrees.push(subtree);
                     return 0;
                 } else if Some(node) == self.tree.get_root() {
-                    if self.strict && tips < min_size {
+                    if self.strict && tips < min_size && self.subtrees.len()>0{
                         let earliest_subtree = self.subtrees.iter()
                             .fold(&Subtree { root: usize::MAX, tips: usize::MIN, level: usize::MAX },
                                   |a, b|{
@@ -365,10 +364,10 @@ pub mod split {
                     debug!("{:?}", subtree);
                 }
                 if !explore {
-                    for subtree in searcher.subtrees {
-                        let st = MutableTree::copy_subtree(&searcher.tree, subtree.root, taxa);
-                        writeln!(handle, "{}", st)?;
-                    }
+                        for subtree in searcher.subtrees {
+                            let st = MutableTree::copy_subtree(&searcher.tree, subtree.root, taxa);
+                            writeln!(handle, "{}", st)?;
+                        }
                 }
             }
         }
@@ -393,7 +392,7 @@ pub(crate) mod stats {
     ) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
-        writeln!(handle, "nodes\tinternal\ttips\trootHeight\tsumbl\tmeanbl")?;
+        writeln!(handle, "nodes\ttips\trootHeight\tsumbl\tmeanbl")?;
 
         for parsed_tree in trees {
             let tree = parsed_tree?;
@@ -415,7 +414,7 @@ pub(crate) mod stats {
             }
             let sum_bl = bl.iter().fold(0.0, |acc, x| acc + x);
             let mean_bl = sum_bl / ((tree.get_node_count() as f64) - 1.0); //no branch on root
-            writeln!(handle, "{}\t{}\t{}\t{}\t{}\t{}", nodes, internal, tips, root_height, sum_bl, mean_bl)?;
+            writeln!(handle, "{}\t{}\t{:.2e}\t{:.2e}\t{:.2e}", nodes, tips, root_height, sum_bl, mean_bl)?;
         }
         Ok(())
     }
@@ -445,7 +444,7 @@ pub mod command_io {
 
 
     //HashMap<String,HashMap<String,AnnotationValue>>
-    pub fn parse_csv(trait_file: path::PathBuf) -> Result<Reader<File>, Box<dyn Error>> {
+    pub fn parse_tsv(trait_file: &path::PathBuf) -> Result<Reader<File>, Box<dyn Error>> {
         let file = File::open(trait_file)?;
         let mut rdr = csv::ReaderBuilder::new()
             .delimiter(b'\t')

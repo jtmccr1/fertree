@@ -11,7 +11,7 @@ impl fmt::Display for MutableTree {
 
 
 fn write_newick(tree: &MutableTree) -> String {
-    //TODO check if branchlengths known and throw error if not known
+    //TODO check if branchlengths known and throw error if not known. Need io erro
     let mut s = write_node(tree,tree.get_root().unwrap());
     s.push_str(";");
     s
@@ -38,7 +38,12 @@ fn write_node(tree: &MutableTree, node_ref: TreeIndex) ->String{
     }
     if let Some(l) =tree.get_length(node_ref){
         s.push_str(":");
-        s.push_str(l.to_string().as_str());
+        let length = if l<1e-4{
+            format!("{:e}", l)
+        }else{
+            l.to_string()
+        };
+        s.push_str(length.as_str());
     }
     return s;
 }

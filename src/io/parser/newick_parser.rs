@@ -229,7 +229,7 @@ mod tests {
 
     #[test]
     fn scientific(){
-        let root = NewickParser::parse_tree("(a:1E1,b:4)l:5e-1;").unwrap();
+        let root = NewickParser::parse_tree("(a:1E1,b:+2e-5)l:5e-1;").unwrap();
         let mut bl = vec![];
         if let Some(l) = root.length{
             bl.push(l);
@@ -239,7 +239,7 @@ mod tests {
                 bl.push(t)
             }
         }
-        assert_eq!(bl,vec![0.5,10.0,4.0]);
+        assert_eq!(bl,vec![0.5,10.0,0.00002]);
     }
 
 
@@ -259,15 +259,15 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
     fn should_error() {
-        NewickParser::parse_tree("('234] ','here a *')");
+        let out = NewickParser::parse_tree("('234] ','here a *')");
+                assert_eq!(true, out.is_err())
     }
 
     #[test]
-    #[should_panic]
     fn should_error_again() {
-        NewickParser::parse_tree("(a,b));");
+        let out = NewickParser::parse_tree("(a,b));");
+        assert_eq!(true, out.is_err())
     }
 
 }

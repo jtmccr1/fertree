@@ -3,7 +3,7 @@ WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 // grammar rules from https://en.wikipedia.org/wiki/Newick_format
 
 numeric = {"-"? ~ (ASCII_DIGIT | ".")+ ~ ("e" ~"-"? ~(ASCII_DIGIT | ".")+)? }
-branchlength = {(ASCII_DIGIT | "." | "-"|^"e")+}
+branchlength = {("-"|"+")? ~ (ASCII_DIGIT | "." | "-"|^"e")+}
 // branchlength = @{numeric}
 
 length = {":" ~ branchlength}
