@@ -22,7 +22,6 @@ struct Cli {
 enum Fertree {
     /// A few useful stats about the trees
     Stats {
-
         #[structopt(subcommand)]
         cmd: Option<stats::SubCommands>,
     },
@@ -64,6 +63,11 @@ enum Fertree {
         #[structopt(short, long, help = "the minimum clade size",required_if("explore","true"))]
         min_size: Option<usize>,
     },
+    //resolve polytomies in a variety of ways
+    Resolve{
+        #[structopt(subcommand)]
+        cmd: resolve::SubCommands,
+    }
 }
 
 

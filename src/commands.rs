@@ -436,6 +436,38 @@ pub(crate) mod stats {
     }
 }
 
+
+pub mod resolve{
+    use rebl::tree::mutable_tree::{MutableTree, TreeIndex};
+
+    #[derive(Debug, StructOpt)]
+    pub enum SubCommands {
+        /// insert branches with length 0
+        Zero,
+        /// spread the nodes evenly between the halfway point between parent node and oldest child
+        Split,
+        /// Spread out node heights according to some Very Fancy math I need to make up
+        Spread,
+        /*
+        draw the sum of the branches from a gamma distribution
+         */
+    }
+
+    fn split(tree:&mut MutableTree){
+
+    }
+
+    fn resolve(tree:&MutableTree,node_ref:TreeIndex,height:f64){
+
+    }
+
+
+
+}
+
+
+
+
 pub mod command_io {
     use std::path;
     use std::fs::File;
