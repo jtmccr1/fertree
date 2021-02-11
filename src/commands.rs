@@ -21,7 +21,8 @@ pub(crate) mod collapse {
     use std::error::Error;
     use std::io::{Write};
     use rand::seq::SliceRandom;
-//TODO set random seed.
+
+    //TODO set random seed.
     pub fn run(trees: newick_importer::NewickImporter
                , key: String, value: String, min_size: usize) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
@@ -45,6 +46,7 @@ pub(crate) mod collapse {
         }
         let mut removed = 0;
         for group in monophyletic_groups.1.iter() {
+            //TODO only make this once
             let mut rng = &mut rand::thread_rng();
 
             for node in group.choose_multiple(&mut rng, group.len() - min_size) {
@@ -279,19 +281,19 @@ pub mod split {
                     self.subtrees.push(subtree);
                     return 0;
                 } else if Some(node) == self.tree.get_root() {
-                    if self.strict && tips < min_size && self.subtrees.len()>0{
+                    if self.strict && tips < min_size && self.subtrees.len() > 0 {
                         let earliest_subtree = self.subtrees.iter()
                             .fold(&Subtree { root: usize::MAX, tips: usize::MIN, level: usize::MAX },
-                                  |a, b|{
+                                  |a, b| {
                                       return if a.level < b.level {
                                           a
-                                      } else if b.level<a.level{
+                                      } else if b.level < a.level {
                                           b
-                                      }else if a.tips<b.tips{
+                                      } else if a.tips < b.tips {
                                           a
-                                      }else{
+                                      } else {
                                           b
-                                      }
+                                      };
                                   });
 
                         //if this is slow could make subtree mutable
@@ -316,7 +318,7 @@ pub mod split {
         fn finalize_selection(&mut self) {
             for subtree in self.subtrees.iter() {
                 if let Some(parent) = self.tree.get_parent(subtree.root) {
-                    self.tree.remove_child(parent, subtree.root)
+                    self.tree.remove_child(parent, subtree.root);
                 }
             }
         }
@@ -351,23 +353,23 @@ pub mod split {
                 searcher.finalize_selection();
                 info!("found {} trees", searcher.subtrees.len());
 
-                if explore{
-                    writeln!(handle,"tree\ttips")?;
+                if explore {
+                    writeln!(handle, "tree\ttips")?;
                 }
 
                 for (i, subtree) in searcher.subtrees.iter().enumerate() {
-                    if explore{
-                        writeln!(handle,"{}\t{}",i,subtree.tips)?;
-                    }else {
+                    if explore {
+                        writeln!(handle, "{}\t{}", i, subtree.tips)?;
+                    } else {
                         info!("tree: {} - {} tips", i, subtree.tips);
                     }
                     debug!("{:?}", subtree);
                 }
                 if !explore {
-                        for subtree in searcher.subtrees {
-                            let st = MutableTree::copy_subtree(&searcher.tree, subtree.root, taxa);
-                            writeln!(handle, "{}", st)?;
-                        }
+                    for subtree in searcher.subtrees {
+                        let st = MutableTree::copy_subtree(&searcher.tree, subtree.root, taxa);
+                        writeln!(handle, "{}", st)?;
+                    }
                 }
             }
         }
@@ -397,9 +399,9 @@ pub(crate) mod stats {
         for parsed_tree in trees {
             let tree = parsed_tree?;
             let root = tree.get_root().unwrap();
-            let root_height = tree.get_height(root);
+            let root_height = tree.get_height(root).unwrap();
             let nodes = tree.get_node_count();
-            let internal = tree.get_internal_node_count();
+            // let internal = tree.get_internal_node_count();
             let tips = tree.get_external_node_count();
             let mut bl = Vec::with_capacity(tree.get_node_count());
             bl.resize(tree.get_node_count(), 0.0);
@@ -437,35 +439,176 @@ pub(crate) mod stats {
 }
 
 
-pub mod resolve{
+pub mod resolve {
     use rebl::tree::mutable_tree::{MutableTree, TreeIndex};
+    use rand::{thread_rng, Rng};
+    use structopt::StructOpt;
+    use rebl::io::parser::newick_importer;
+    use std::error::Error;
+    use std::io::Write;
+
 
     #[derive(Debug, StructOpt)]
     pub enum SubCommands {
         /// insert branches with length 0
         Zero,
         /// spread the nodes evenly between the halfway point between parent node and oldest child
-        Split,
-        /// Spread out node heights according to some Very Fancy math I need to make up
-        Spread,
-        /*
-        draw the sum of the branches from a gamma distribution
-         */
-    }
-
-    fn split(tree:&mut MutableTree){
+        Evenly,
 
     }
 
-    fn resolve(tree:&MutableTree,node_ref:TreeIndex,height:f64){
-
+    struct Polytomy {
+        root: TreeIndex,
+        tips: Vec<TreeIndex>,
     }
 
+   pub  fn run(trees: newick_importer::NewickImporter, cmd: SubCommands) -> Result<(), Box<dyn Error>> {
+       let stdout = std::io::stdout(); // get the global stdout entity
+       let mut handle = stdout.lock(); // acquire a lock on it
+       for parsed_tree in trees {
+           let mut tree = parsed_tree?;
+           resolve(&mut tree,&cmd);
+           writeln!(handle, "{}", tree)?;
 
-
+       }
+       Ok(())
 }
+    // collect all poltyomies and child vectors in a stuct
+    // set heights
+    fn resolve(tree: &mut MutableTree, cmd: &SubCommands) {
+        tree.calc_node_heights();
+        let mut polytomies = tree.internal_nodes.iter()
+            .map(|n| (n, tree.get_children(*n)))
+            .filter(|(_n, kids)| { kids.len() > 2 })
+            .map(|(root, tips)| { Polytomy { root: *root, tips } })
+            .collect::<Vec<Polytomy>>();
+        let node_count = tree.get_node_count();
+        info!("{} polytomies found", polytomies.len());
+        for polytomy in polytomies.iter() {
+            insert_nodes(tree, polytomy.root)
+        }
+
+        info!("resolved with {} nodes", tree.get_node_count()-node_count);
+
+        match cmd {
+            SubCommands::Zero => {
+                for polytomy in polytomies.iter() {
+                    for tip in polytomy.tips.iter() {
+                        let mut node = *tip;
+                        while let Some(parent) = tree.get_parent(node) {
+                            if parent == polytomy.root || tree.get_length(parent).is_some() {
+                                break;
+                            }
+                            tree.set_length(parent, 0.0);
+                            node = parent;
+                        }
+                    }
+                }
+                debug!("done setting branch lengths \n heights known : {} - lengths known: {}", tree.heights_known,tree.branchlengths_known)
+
+            }
+            SubCommands::Evenly => {
+                debug!("about to set  setting node heights \n heights known : {} - lengths known: {}", tree.heights_known,tree.branchlengths_known);
+
+                for polytomy in polytomies.iter_mut() {
+
+                    // scootch the root node up a little
+
+                    if let Some(bl)=tree.get_length(polytomy.root){
+                        tree.set_height(polytomy.root,tree.get_height(polytomy.root).unwrap()+bl*0.5);
+                    }
 
 
+                    polytomy.tips
+                        .sort_unstable_by(|a, b| {
+                            tree.get_height(*b).partial_cmp(&tree.get_height(*a)).unwrap()
+                        });
+                    for tip in polytomy.tips.iter() {
+                        // get path back to tip with set height
+                        // space out evenly between this and some factor of the the tip.
+                        let mut path_to_proot = vec![];
+                        let mut node = *tip;
+
+                        let mut upper_bound = tree.get_height(*tip).unwrap();
+
+                        while let Some(parent) = tree.get_parent(node) {
+                            if tree.get_height(parent).is_some() {
+                                upper_bound= tree.get_height(parent).unwrap();
+                                break;
+                            }
+                            path_to_proot.push(parent);
+                            node = parent;
+                        }
+                        let lower_bound = tree.get_height(*tip).expect("lowerbound node should have a height")+
+                            tree.get_length(*tip).unwrap()*0.5;
+                        let diff = (upper_bound-lower_bound)/((path_to_proot.len() +1) as f64);
+                        let mut height = lower_bound+diff;
+                        for node in path_to_proot.iter(){
+                            tree.set_height(*node, height);
+                            height+=diff;
+                        }
+                    }
+                }
+                tree.calculate_branchlengths();
+                debug!("done setting node heights \n heights known : {} - lengths known: {}", tree.heights_known,tree.branchlengths_known)
+            }
+
+        }
+    }
+
+
+    /// function that takes a polytomy node and randomly resolves
+    ///
+    fn insert_nodes(tree: &mut MutableTree, node_ref: TreeIndex) {
+        //dumb way
+        //remove all kids
+        // split kids into two groups
+        // if group is 1 add it as child
+        //if group is add internal node as child and repeat
+        let mut kids = vec![];
+        for child in tree.get_children(node_ref) {
+            let removed = tree.remove_child(node_ref, child);
+            if let Some(c) = removed {
+                kids.push(c);
+            }
+        }
+        // TODO maybe not recursive.
+        let mut rng = thread_rng();
+        let n: usize = rng.gen_range(1..kids.len());
+
+        let first_family = &kids[0..n];
+        let second_family = &kids[n..kids.len()];
+
+        if first_family.len() == 1 {
+            tree.add_child(node_ref, first_family[0]);
+            tree.set_parent(node_ref, first_family[0]);
+        } else {
+            let still_polytomy = first_family.len()>2;
+            let kido = tree.make_internal_node(first_family.to_owned());
+            tree.add_child(node_ref, kido);
+            tree.set_parent(node_ref, kido);
+            insert_nodes(tree, kido);
+            if still_polytomy{
+                insert_nodes(tree, kido);
+
+            }
+        }
+
+        if second_family.len() == 1 {
+            tree.add_child(node_ref, second_family[0]);
+            tree.set_parent(node_ref, second_family[0]);
+        } else {
+            let still_polytomy = second_family.len()>2;
+            let kido = tree.make_internal_node(second_family.to_owned());
+            tree.add_child(node_ref, kido);
+            tree.set_parent(node_ref, kido);
+            if still_polytomy{
+                insert_nodes(tree, kido);
+
+            }
+        }
+    }
+}
 
 
 pub mod command_io {

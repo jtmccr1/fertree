@@ -1,7 +1,7 @@
 mod commands;
 
 use structopt::StructOpt;
-use commands::{stats, annotate, extract, collapse};
+use commands::{stats, annotate, extract, collapse,resolve};
 use rebl::io::parser::newick_importer;
 use std::{path, io};
 use crate::commands::split;
@@ -63,7 +63,7 @@ enum Fertree {
         #[structopt(short, long, help = "the minimum clade size",required_if("explore","true"))]
         min_size: Option<usize>,
     },
-    //resolve polytomies in a variety of ways
+    /// Resolve polytomies with branches of 0 or nodes spread out between constraints
     Resolve{
         #[structopt(subcommand)]
         cmd: resolve::SubCommands,
@@ -112,6 +112,9 @@ fn main() {
         },
         Fertree::Split {min_size,explore,relaxed}=>{
             split::run(tree_importer,min_size,explore,!relaxed)
+        },
+        Fertree::Resolve {cmd}=>{
+            resolve::run(tree_importer, cmd)
         }
         _ => {
             warn!("not implemented");
