@@ -1,10 +1,10 @@
-use std::io::{BufRead, Read};
-use std::fs::File;
-use std::path::PathBuf;
-use std::io;
+use super::newick_parser::NewickParser;
 use crate::tree::mutable_tree::MutableTree;
 use std::error::Error;
-use super::newick_parser::NewickParser;
+use std::fs::File;
+use std::io;
+use std::io::{BufRead, Read};
+use std::path::PathBuf;
 
 //https://stackoverflow.com/questions/36088116/how-to-do-polymorphic-io-from-either-a-file-or-stdin-in-rust/49964042
 pub struct NewickImporter<'a> {
@@ -50,13 +50,11 @@ impl<'a> Iterator for NewickImporter<'a> {
                 Ok(nwk_string) => {
                     let tree = NewickParser::parse_tree(&*nwk_string);
                     match tree {
-                        Ok(node) => {
-                            Some(Ok(MutableTree::from_fixed_node(node)))
-                        }
-                        Err(e)=>Some(Err(Box::new(e)))
+                        Ok(node) => Some(Ok(MutableTree::from_fixed_node(node))),
+                        Err(e) => Some(Err(Box::new(e))),
                     }
                 }
-                Err(e) => Some(Err(Box::new(e)))
+                Err(e) => Some(Err(Box::new(e))),
             }
         } else {
             None

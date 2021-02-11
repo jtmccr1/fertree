@@ -1,15 +1,20 @@
-use std::collections::HashMap;
 use super::AnnotationValue;
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct FixedNode {
-    pub children: Vec<Box<FixedNode>>,
+    pub children: Vec<FixedNode>,
     pub label: Option<String>,
     pub taxon: Option<String>,
     pub length: Option<f64>,
-    pub annotations: Option<HashMap<String,AnnotationValue>>
+    pub annotations: Option<HashMap<String, AnnotationValue>>,
 }
 
+impl Default for FixedNode {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl FixedNode {
     pub fn new() -> Self {
@@ -18,16 +23,17 @@ impl FixedNode {
             label: None,
             taxon: None,
             length: None,
-            annotations: None
+            annotations: None,
         }
     }
+
     pub fn iter(&self) -> PreorderIter {
         PreorderIter::new(&self)
     }
 }
 
 pub struct PreorderIter<'a> {
-    stack: Vec<&'a FixedNode>
+    stack: Vec<&'a FixedNode>,
 }
 
 impl<'a> PreorderIter<'a> {
@@ -41,10 +47,10 @@ impl<'a> Iterator for PreorderIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(node) = self.stack.pop() {
             for child in node.children.iter() {
-                self.stack.push(&**child);
+                self.stack.push(child);
             }
             return Some(&node);
-        }
-        return None;
+        };
+        None
     }
 }

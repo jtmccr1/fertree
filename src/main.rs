@@ -1,16 +1,18 @@
 mod commands;
 
-use structopt::StructOpt;
-use commands::{stats, annotate, extract, collapse,resolve};
-use rebl::io::parser::newick_importer;
-use std::{path, io};
 use crate::commands::split;
+use commands::{annotate, collapse, extract, resolve, stats};
+use rebl::io::parser::newick_importer;
+use std::{io, path};
+use structopt::StructOpt;
 #[macro_use]
 extern crate log;
 
-
 #[derive(Debug, StructOpt)]
-#[structopt(about = "command line tools for processing phylogenetic trees in rust", rename_all = "kebab-case")]
+#[structopt(
+    about = "command line tools for processing phylogenetic trees in rust",
+    rename_all = "kebab-case"
+)]
 struct Cli {
     #[structopt(flatten)]
     common: Common,
@@ -32,7 +34,12 @@ enum Fertree {
     },
     /// Annotate the tips of a tree from a tsv file.
     Annotate {
-        #[structopt(short, long, parse(from_os_str), help = "trait tsv with taxa labels as first field")]
+        #[structopt(
+            short,
+            long,
+            parse(from_os_str),
+            help = "trait tsv with taxa labels as first field"
+        )]
         traits: path::PathBuf,
     },
     /// Extract data from a tree
@@ -42,7 +49,11 @@ enum Fertree {
     },
     /// Collapse (i.e. subsample) monophyletic clades into a set number of tips
     Collapse {
-        #[structopt(short, long, help = "annotation key we are collapsing by. must be discrete")]
+        #[structopt(
+            short,
+            long,
+            help = "annotation key we are collapsing by. must be discrete"
+        )]
         annotation: String,
         #[structopt(short, long, help = "annotation value we are collapsing by")]
         value: String,
@@ -55,25 +66,42 @@ enum Fertree {
     /// are at different cutoffss. When combined with a min_size, --explore
     /// outputs the number of tips in each tree.
     Split {
-
-        #[structopt(short, long, help = "Don't split tree but print the number of trees at different cut-offs")]
+        #[structopt(
+            short,
+            long,
+            help = "Don't split tree but print the number of trees at different cut-offs"
+        )]
         explore: bool,
-        #[structopt(short, long, help = "relax the minimum clade size so that the root subtree is a separate subtree.")]
+        #[structopt(
+            short,
+            long,
+            help = "relax the minimum clade size so that the root subtree is a separate subtree."
+        )]
         relaxed: bool,
-        #[structopt(short, long, help = "the minimum clade size",required_if("explore","true"))]
+        #[structopt(
+            short,
+            long,
+            help = "the minimum clade size",
+            required_if("explore", "true")
+        )]
         min_size: Option<usize>,
     },
     /// Resolve polytomies with branches of 0 or nodes spread out between constraints
-    Resolve{
+    Resolve {
         #[structopt(subcommand)]
         cmd: resolve::SubCommands,
-    }
+    },
 }
-
 
 #[derive(Debug, StructOpt)]
 pub struct Common {
-    #[structopt(short, long, parse(from_os_str), help = "input tree file", global = true)]
+    #[structopt(
+        short,
+        long,
+        parse(from_os_str),
+        help = "input tree file",
+        global = true
+    )]
     infile: Option<path::PathBuf>,
     // #[structopt(short, long, parse(from_os_str), help = "output tree file", global = true)]
     // outfile: Option<path::PathBuf>,
@@ -92,30 +120,24 @@ fn main() {
     let stdin = io::stdin();
     let tree_importer = match args.common.infile {
         Some(path) => newick_importer::NewickImporter::from_path(path).expect("Error reading file"),
-        None => {
-            newick_importer::NewickImporter::from_console(&stdin)
-        }
+        None => newick_importer::NewickImporter::from_console(&stdin),
     };
 
     let result = match args.cmd {
-        Fertree::Stats { cmd } => {
-            stats::run(tree_importer, cmd)
-        }
-        Fertree::Annotate { traits } => {
-            annotate::run(tree_importer, traits)
-        }
-        Fertree::Extract { cmd } => {
-            extract::run(tree_importer, cmd)
-        }
-        Fertree::Collapse { annotation, value, min_size } => {
-            collapse::run(tree_importer, annotation, value, min_size)
-        },
-        Fertree::Split {min_size,explore,relaxed}=>{
-            split::run(tree_importer,min_size,explore,!relaxed)
-        },
-        Fertree::Resolve {cmd}=>{
-            resolve::run(tree_importer, cmd)
-        }
+        Fertree::Stats { cmd } => stats::run(tree_importer, cmd),
+        Fertree::Annotate { traits } => annotate::run(tree_importer, traits),
+        Fertree::Extract { cmd } => extract::run(tree_importer, cmd),
+        Fertree::Collapse {
+            annotation,
+            value,
+            min_size,
+        } => collapse::run(tree_importer, annotation, value, min_size),
+        Fertree::Split {
+            min_size,
+            explore,
+            relaxed,
+        } => split::run(tree_importer, min_size, explore, !relaxed),
+        Fertree::Resolve { cmd } => resolve::run(tree_importer, cmd),
         _ => {
             warn!("not implemented");
             Ok(())
@@ -131,8 +153,4 @@ fn main() {
             std::process::exit(exitcode::IOERR);
         }
     }
-
 }
-
-
-

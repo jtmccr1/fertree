@@ -13,18 +13,22 @@
 mod thin {}
 
 pub(crate) mod collapse {
-    use rebl::tree::mutable_tree::{MutableTree, TreeIndex};
-    use std::collections::HashSet;
-    use rebl::tree::AnnotationValue;
     use rebl::io::parser::newick_importer;
+    use rebl::tree::mutable_tree::{MutableTree, TreeIndex};
+    use rebl::tree::AnnotationValue;
+    use std::collections::HashSet;
 
-    use std::error::Error;
-    use std::io::{Write};
     use rand::seq::SliceRandom;
+    use std::error::Error;
+    use std::io::Write;
 
     //TODO set random seed.
-    pub fn run(trees: newick_importer::NewickImporter
-               , key: String, value: String, min_size: usize) -> Result<(), Box<dyn Error>> {
+    pub fn run(
+        trees: newick_importer::NewickImporter,
+        key: String,
+        value: String,
+        min_size: usize,
+    ) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
         for parsed_tree in trees {
@@ -36,11 +40,21 @@ pub(crate) mod collapse {
         Ok(())
     }
 
-    pub fn collapse_uniform_clades(tree: &MutableTree, key: &String, value: &String, min_size: usize) -> MutableTree {
-        let mut taxa: HashSet<String> = tree.external_nodes.iter()
-            .map(|node| tree.get_taxon(*node)).map(|n| String::from(n.unwrap())).collect();
+    pub fn collapse_uniform_clades(
+        tree: &MutableTree,
+        key: &str,
+        value: &str,
+        min_size: usize,
+    ) -> MutableTree {
+        let mut taxa: HashSet<String> = tree
+            .external_nodes
+            .iter()
+            .map(|node| tree.get_taxon(*node))
+            .map(|n| String::from(n.unwrap()))
+            .collect();
 
-        let monophyletic_groups = get_monophyletic_groups(tree, tree.get_root().unwrap(), key, value);
+        let monophyletic_groups =
+            get_monophyletic_groups(tree, tree.get_root().unwrap(), key, value);
         if monophyletic_groups.0 {
             warn!("The whole tree is a monophyletic clade!")
         }
@@ -56,11 +70,15 @@ pub(crate) mod collapse {
             }
         }
         info!("Removed : {} taxa", removed);
-        let new_tree = MutableTree::from_tree(tree, &taxa);
-        new_tree
+        MutableTree::from_tree(tree, &taxa)
     }
 
-    fn get_monophyletic_groups(tree: &MutableTree, node_ref: TreeIndex, key: &String, target_annotation: &String) -> (bool, Vec<Vec<TreeIndex>>) {
+    fn get_monophyletic_groups(
+        tree: &MutableTree,
+        node_ref: TreeIndex,
+        key: &str,
+        target_annotation: &str,
+    ) -> (bool, Vec<Vec<TreeIndex>>) {
         if tree.is_external(node_ref) {
             if let Some(annotation) = tree.get_annotation(node_ref, key) {
                 match annotation {
@@ -71,7 +89,9 @@ pub(crate) mod collapse {
                             (false, vec![vec![]])
                         };
                     }
-                    _ => { panic!("not a discrete trait") }
+                    _ => {
+                        panic!("not a discrete trait")
+                    }
                 }
             }
             // not ignoring empty nodes they are counted
@@ -80,48 +100,57 @@ pub(crate) mod collapse {
 
         let mut child_output = vec![];
         for child in tree.get_children(node_ref).iter() {
-            child_output.push(get_monophyletic_groups(tree, *child, key, &target_annotation))
+            child_output.push(get_monophyletic_groups(
+                tree,
+                *child,
+                key,
+                &target_annotation,
+            ))
         }
-        let am_i_a_root = child_output.iter().map(|t| t.0).fold(true, |acc, b| acc & b);
+        let am_i_a_root = child_output
+            .iter()
+            .map(|t| t.0)
+            .fold(true, |acc, b| acc & b);
         if am_i_a_root {
-            let combined_child_tips = child_output.into_iter()
+            let combined_child_tips = child_output
+                .into_iter()
                 .map(|t| t.1)
                 .flatten()
                 .flatten()
                 .collect::<Vec<TreeIndex>>();
-            return (true, vec![combined_child_tips]);
+            (true, vec![combined_child_tips])
         } else {
-            let child_tips = child_output.into_iter()
+            let child_tips = child_output
+                .into_iter()
                 .map(|t| t.1)
                 .fold(vec![], |mut acc, next| {
                     acc.extend(next);
-                    return acc;
+                    acc
                 });
-            return (false, child_tips);
+            (false, child_tips)
         }
     }
 }
 
-
 pub(crate) mod annotate {
-    use rebl::tree::mutable_tree::MutableTree;
-    use std::collections::HashMap;
-    use rebl::tree::AnnotationValue;
-    use std::path;
-    use std::error::Error;
-    use std::io::{Write};
-    use rebl::io::parser::newick_importer;
     use super::command_io;
+    use rebl::io::parser::newick_importer;
+    use rebl::tree::mutable_tree::MutableTree;
+    use rebl::tree::AnnotationValue;
+    use std::collections::HashMap;
+    use std::error::Error;
+    use std::io::Write;
+    use std::path;
 
     use csv::Reader;
     use std::fs::File;
 
-
-    pub fn run(trees: newick_importer::NewickImporter
-               , traits: path::PathBuf) -> Result<(), Box<dyn Error>> {
+    pub fn run(
+        trees: newick_importer::NewickImporter,
+        traits: path::PathBuf,
+    ) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
-
 
         for parsed_tree in trees {
             //TODO avoid parsing at each loop
@@ -133,7 +162,10 @@ pub(crate) mod annotate {
         Ok(())
     }
 
-    pub fn annotate_tips(tree: &mut MutableTree, reader: &mut Reader<File>) -> Result<(), Box<dyn Error>> {
+    pub fn annotate_tips(
+        tree: &mut MutableTree,
+        reader: &mut Reader<File>,
+    ) -> Result<(), Box<dyn Error>> {
         //todo fix to handle taxa differently
         type Record = HashMap<String, Option<AnnotationValue>>;
 
@@ -161,13 +193,12 @@ pub(crate) mod annotate {
 }
 
 pub mod extract {
-    use structopt::StructOpt;
-    use std::error::Error;
     use rebl::io::parser::newick_importer;
+    use std::error::Error;
+    use structopt::StructOpt;
 
-    use std::io::{Write};
     use rebl::tree::AnnotationValue;
-
+    use std::io::Write;
 
     #[derive(Debug, StructOpt)]
     pub enum SubCommands {
@@ -177,20 +208,17 @@ pub mod extract {
         Annotations,
     }
 
-    pub fn run(trees: newick_importer::NewickImporter
-               , cmd: SubCommands) -> Result<(), Box<dyn Error>> {
+    pub fn run(
+        trees: newick_importer::NewickImporter,
+        cmd: SubCommands,
+    ) -> Result<(), Box<dyn Error>> {
         match cmd {
-            SubCommands::Taxa => {
-                taxa(trees)
-            }
-            SubCommands::Annotations => {
-                annotations(trees)
-            }
+            SubCommands::Taxa => taxa(trees),
+            SubCommands::Annotations => annotations(trees),
         }
     }
 
-    fn taxa(trees: newick_importer::NewickImporter
-    ) -> Result<(), Box<dyn Error>> {
+    fn taxa(trees: newick_importer::NewickImporter) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
         for parsed_tree in trees {
@@ -208,23 +236,29 @@ pub mod extract {
         Ok(())
     }
 
-    fn annotations(trees: newick_importer::NewickImporter
-    ) -> Result<(), Box<dyn Error>> {
+    fn annotations(trees: newick_importer::NewickImporter) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
         for parsed_tree in trees {
             let tree = parsed_tree?;
-            let header = tree.annotation_type.keys().map(|k| k.clone()).collect::<Vec<String>>().join("\t");
-            writeln!(handle, "{}\t{}", "taxa", header)?;
+            let header = tree
+                .annotation_type
+                .keys()
+                .cloned()
+                .collect::<Vec<String>>()
+                .join("\t");
+            writeln!(handle, "taxa\t{}", header)?;
             for node_ref in tree.external_nodes.iter() {
-                let annotation_string = tree.annotation_type.keys()
+                let annotation_string = tree
+                    .annotation_type
+                    .keys()
                     .map(|k| annotation_value_string(tree.get_annotation(*node_ref, k)))
                     .collect::<Vec<String>>()
                     .join("\t");
                 if let Some(taxa) = tree.get_taxon(*node_ref) {
                     writeln!(handle, "{}\t{}", taxa, annotation_string)?;
                 } else {
-                    writeln!(handle, "{}\t{}", "", annotation_string)?;
+                    writeln!(handle, "\t{}", annotation_string)?;
                 }
             }
         }
@@ -233,8 +267,7 @@ pub mod extract {
 
     fn annotation_value_string(value: Option<&AnnotationValue>) -> String {
         if let Some(annotation) = value {
-            let value_string = annotation.to_string();
-            format!("{}", value_string)
+            annotation.to_string()
         } else {
             "".to_string()
         }
@@ -244,8 +277,8 @@ pub mod extract {
 pub mod split {
     use rebl::io::parser::newick_importer;
     use rebl::tree::mutable_tree::{MutableTree, TreeIndex};
+    use std::collections::HashSet;
     use std::error::Error;
-    use std::collections::{HashSet};
     use std::io::Write;
 
     #[derive(Debug, PartialEq)]
@@ -254,7 +287,6 @@ pub mod split {
         tips: usize,
         level: usize,
     }
-
 
     struct SubtreeSearcher {
         tree: MutableTree,
@@ -277,36 +309,57 @@ pub mod split {
                     tips += self.get_subtrees(child, min_size, level + 1);
                 }
                 if tips >= min_size {
-                    let subtree = Subtree { root: node, tips, level };
+                    let subtree = Subtree {
+                        root: node,
+                        tips,
+                        level,
+                    };
                     self.subtrees.push(subtree);
                     return 0;
                 } else if Some(node) == self.tree.get_root() {
-                    if self.strict && tips < min_size && self.subtrees.len() > 0 {
-                        let earliest_subtree = self.subtrees.iter()
-                            .fold(&Subtree { root: usize::MAX, tips: usize::MIN, level: usize::MAX },
-                                  |a, b| {
-                                      return if a.level < b.level {
-                                          a
-                                      } else if b.level < a.level {
-                                          b
-                                      } else if a.tips < b.tips {
-                                          a
-                                      } else {
-                                          b
-                                      };
-                                  });
+                    if self.strict && tips < min_size && !self.subtrees.is_empty() {
+                        let earliest_subtree = self.subtrees.iter().fold(
+                            &Subtree {
+                                root: usize::MAX,
+                                tips: usize::MIN,
+                                level: usize::MAX,
+                            },
+                            |a, b| {
+                                if a.level < b.level {
+                                    a
+                                } else if b.level < a.level {
+                                    b
+                                } else if a.tips < b.tips {
+                                    a
+                                } else {
+                                    b
+                                }
+                            },
+                        );
 
                         //if this is slow could make subtree mutable
                         let new_tip_count = tips + earliest_subtree.tips;
-                        let root_subtree = Subtree { root: node, tips: tips + earliest_subtree.tips, level: level };
+                        let root_subtree = Subtree {
+                            root: node,
+                            tips: tips + earliest_subtree.tips,
+                            level,
+                        };
                         //TODO error
-                        let index = self.subtrees.iter().position(|x| *x == *earliest_subtree).expect("subtree not found");
+                        let index = self
+                            .subtrees
+                            .iter()
+                            .position(|x| *x == *earliest_subtree)
+                            .expect("subtree not found");
                         self.subtrees.swap_remove(index);
                         self.subtrees.push(root_subtree);
 
                         return new_tip_count;
                     } else {
-                        let subtree = Subtree { root: node, tips, level };
+                        let subtree = Subtree {
+                            root: node,
+                            tips,
+                            level,
+                        };
                         self.subtrees.push(subtree);
                         return 0;
                     }
@@ -324,8 +377,12 @@ pub mod split {
         }
     }
 
-
-    pub fn run(trees: newick_importer::NewickImporter, min_clade_size: Option<usize>, explore: bool, strict: bool) -> Result<(), Box<dyn Error>> {
+    pub fn run(
+        trees: newick_importer::NewickImporter,
+        min_clade_size: Option<usize>,
+        explore: bool,
+        strict: bool,
+    ) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
 
@@ -335,7 +392,11 @@ pub mod split {
         for parsed_tree in trees {
             let starting_tree = parsed_tree?;
             trace!("starting to split");
-            let mut searcher = SubtreeSearcher { tree: starting_tree, subtrees: vec![], strict };
+            let mut searcher = SubtreeSearcher {
+                tree: starting_tree,
+                subtrees: vec![],
+                strict,
+            };
 
             if explore && min_clade_size.is_none() {
                 writeln!(handle, "Exploring tree topology")?;
@@ -343,13 +404,24 @@ pub mod split {
                 let mut min_size = 4;
                 while min_size < tip_count {
                     searcher.collate_subtrees(min_size);
-                    writeln!(handle, "cutoff of {} leads to {} trees", min_size, searcher.subtrees.len())?;
+                    writeln!(
+                        handle,
+                        "cutoff of {} leads to {} trees",
+                        min_size,
+                        searcher.subtrees.len()
+                    )?;
                     min_size *= 2;
                 }
             } else {
-                searcher.collate_subtrees(min_clade_size.expect("min-clade should be set to an integer"));
-                let taxa = &searcher.tree.external_nodes.iter()
-                    .map(|n| searcher.tree.get_taxon(*n).unwrap().to_string()).collect::<HashSet<String>>();
+                searcher.collate_subtrees(
+                    min_clade_size.expect("min-clade should be set to an integer"),
+                );
+                let taxa = &searcher
+                    .tree
+                    .external_nodes
+                    .iter()
+                    .map(|n| searcher.tree.get_taxon(*n).unwrap().to_string())
+                    .collect::<HashSet<String>>();
                 searcher.finalize_selection();
                 info!("found {} trees", searcher.subtrees.len());
 
@@ -378,20 +450,17 @@ pub mod split {
 }
 
 pub(crate) mod stats {
-    use structopt::StructOpt;
     use rebl::io::parser::newick_importer;
-    use std::io::{Write};
     use std::error::Error;
-
+    use std::io::Write;
+    use structopt::StructOpt;
 
     #[derive(Debug, StructOpt)]
     pub enum SubCommands {
         Tips,
     }
 
-
-    fn general_stats(trees: newick_importer::NewickImporter
-    ) -> Result<(), Box<dyn Error>> {
+    fn general_stats(trees: newick_importer::NewickImporter) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
         writeln!(handle, "nodes\ttips\trootHeight\tsumbl\tmeanbl")?;
@@ -416,19 +485,23 @@ pub(crate) mod stats {
             }
             let sum_bl = bl.iter().fold(0.0, |acc, x| acc + x);
             let mean_bl = sum_bl / ((tree.get_node_count() as f64) - 1.0); //no branch on root
-            writeln!(handle, "{}\t{}\t{:.2e}\t{:.2e}\t{:.2e}", nodes, tips, root_height, sum_bl, mean_bl)?;
+            writeln!(
+                handle,
+                "{}\t{}\t{:.2e}\t{:.2e}\t{:.2e}",
+                nodes, tips, root_height, sum_bl, mean_bl
+            )?;
         }
         Ok(())
     }
 
-    pub fn run(trees: newick_importer::NewickImporter
-               , cmd: Option<SubCommands>) -> Result<(), Box<dyn Error>> {
+    pub fn run(
+        trees: newick_importer::NewickImporter,
+        cmd: Option<SubCommands>,
+    ) -> Result<(), Box<dyn Error>> {
         //TODO move tree reading and output buffer handling out here and pass to commands
 
         match cmd {
-            None => {
-                general_stats(trees)
-            }
+            None => general_stats(trees),
 
             _ => {
                 warn!("nothing done");
@@ -438,15 +511,13 @@ pub(crate) mod stats {
     }
 }
 
-
 pub mod resolve {
-    use rebl::tree::mutable_tree::{MutableTree, TreeIndex};
     use rand::{thread_rng, Rng};
-    use structopt::StructOpt;
     use rebl::io::parser::newick_importer;
+    use rebl::tree::mutable_tree::{MutableTree, TreeIndex};
     use std::error::Error;
     use std::io::Write;
-
+    use structopt::StructOpt;
 
     #[derive(Debug, StructOpt)]
     pub enum SubCommands {
@@ -454,7 +525,6 @@ pub mod resolve {
         Zero,
         /// spread the nodes evenly between the halfway point between parent node and oldest child
         Evenly,
-
     }
 
     struct Polytomy {
@@ -462,25 +532,29 @@ pub mod resolve {
         tips: Vec<TreeIndex>,
     }
 
-   pub  fn run(trees: newick_importer::NewickImporter, cmd: SubCommands) -> Result<(), Box<dyn Error>> {
-       let stdout = std::io::stdout(); // get the global stdout entity
-       let mut handle = stdout.lock(); // acquire a lock on it
-       for parsed_tree in trees {
-           let mut tree = parsed_tree?;
-           resolve(&mut tree,&cmd);
-           writeln!(handle, "{}", tree)?;
-
-       }
-       Ok(())
-}
+    pub fn run(
+        trees: newick_importer::NewickImporter,
+        cmd: SubCommands,
+    ) -> Result<(), Box<dyn Error>> {
+        let stdout = std::io::stdout(); // get the global stdout entity
+        let mut handle = stdout.lock(); // acquire a lock on it
+        for parsed_tree in trees {
+            let mut tree = parsed_tree?;
+            resolve(&mut tree, &cmd);
+            writeln!(handle, "{}", tree)?;
+        }
+        Ok(())
+    }
     // collect all poltyomies and child vectors in a stuct
     // set heights
     fn resolve(tree: &mut MutableTree, cmd: &SubCommands) {
         tree.calc_node_heights();
-        let mut polytomies = tree.internal_nodes.iter()
+        let mut polytomies = tree
+            .internal_nodes
+            .iter()
             .map(|n| (n, tree.get_children(*n)))
-            .filter(|(_n, kids)| { kids.len() > 2 })
-            .map(|(root, tips)| { Polytomy { root: *root, tips } })
+            .filter(|(_n, kids)| kids.len() > 2)
+            .map(|(root, tips)| Polytomy { root: *root, tips })
             .collect::<Vec<Polytomy>>();
         let node_count = tree.get_node_count();
         info!("{} polytomies found", polytomies.len());
@@ -488,7 +562,7 @@ pub mod resolve {
             insert_nodes(tree, polytomy.root)
         }
 
-        info!("resolved with {} nodes", tree.get_node_count()-node_count);
+        info!("resolved with {} nodes", tree.get_node_count() - node_count);
 
         match cmd {
             SubCommands::Zero => {
@@ -504,25 +578,32 @@ pub mod resolve {
                         }
                     }
                 }
-                debug!("done setting branch lengths \n heights known : {} - lengths known: {}", tree.heights_known,tree.branchlengths_known)
-
+                debug!(
+                    "done setting branch lengths \n heights known : {} - lengths known: {}",
+                    tree.heights_known, tree.branchlengths_known
+                )
             }
             SubCommands::Evenly => {
-                debug!("about to set  setting node heights \n heights known : {} - lengths known: {}", tree.heights_known,tree.branchlengths_known);
+                debug!(
+                    "about to set  setting node heights \n heights known : {} - lengths known: {}",
+                    tree.heights_known, tree.branchlengths_known
+                );
 
                 for polytomy in polytomies.iter_mut() {
-
                     // scootch the root node up a little
 
-                    if let Some(bl)=tree.get_length(polytomy.root){
-                        tree.set_height(polytomy.root,tree.get_height(polytomy.root).unwrap()+bl*0.5);
+                    if let Some(bl) = tree.get_length(polytomy.root) {
+                        tree.set_height(
+                            polytomy.root,
+                            tree.get_height(polytomy.root).unwrap() + bl * 0.5,
+                        );
                     }
 
-
-                    polytomy.tips
-                        .sort_unstable_by(|a, b| {
-                            tree.get_height(*b).partial_cmp(&tree.get_height(*a)).unwrap()
-                        });
+                    polytomy.tips.sort_unstable_by(|a, b| {
+                        tree.get_height(*b)
+                            .partial_cmp(&tree.get_height(*a))
+                            .unwrap()
+                    });
                     for tip in polytomy.tips.iter() {
                         // get path back to tip with set height
                         // space out evenly between this and some factor of the the tip.
@@ -533,29 +614,32 @@ pub mod resolve {
 
                         while let Some(parent) = tree.get_parent(node) {
                             if tree.get_height(parent).is_some() {
-                                upper_bound= tree.get_height(parent).unwrap();
+                                upper_bound = tree.get_height(parent).unwrap();
                                 break;
                             }
                             path_to_proot.push(parent);
                             node = parent;
                         }
-                        let lower_bound = tree.get_height(*tip).expect("lowerbound node should have a height")+
-                            tree.get_length(*tip).unwrap()*0.5;
-                        let diff = (upper_bound-lower_bound)/((path_to_proot.len() +1) as f64);
-                        let mut height = lower_bound+diff;
-                        for node in path_to_proot.iter(){
+                        let lower_bound = tree
+                            .get_height(*tip)
+                            .expect("lowerbound node should have a height")
+                            + tree.get_length(*tip).unwrap() * 0.5;
+                        let diff = (upper_bound - lower_bound) / ((path_to_proot.len() + 1) as f64);
+                        let mut height = lower_bound + diff;
+                        for node in path_to_proot.iter() {
                             tree.set_height(*node, height);
-                            height+=diff;
+                            height += diff;
                         }
                     }
                 }
                 tree.calculate_branchlengths();
-                debug!("done setting node heights \n heights known : {} - lengths known: {}", tree.heights_known,tree.branchlengths_known)
+                debug!(
+                    "done setting node heights \n heights known : {} - lengths known: {}",
+                    tree.heights_known, tree.branchlengths_known
+                )
             }
-
         }
     }
-
 
     /// function that takes a polytomy node and randomly resolves
     ///
@@ -583,14 +667,13 @@ pub mod resolve {
             tree.add_child(node_ref, first_family[0]);
             tree.set_parent(node_ref, first_family[0]);
         } else {
-            let still_polytomy = first_family.len()>2;
+            let still_polytomy = first_family.len() > 2;
             let kido = tree.make_internal_node(first_family.to_owned());
             tree.add_child(node_ref, kido);
             tree.set_parent(node_ref, kido);
             insert_nodes(tree, kido);
-            if still_polytomy{
+            if still_polytomy {
                 insert_nodes(tree, kido);
-
             }
         }
 
@@ -598,25 +681,22 @@ pub mod resolve {
             tree.add_child(node_ref, second_family[0]);
             tree.set_parent(node_ref, second_family[0]);
         } else {
-            let still_polytomy = second_family.len()>2;
+            let still_polytomy = second_family.len() > 2;
             let kido = tree.make_internal_node(second_family.to_owned());
             tree.add_child(node_ref, kido);
             tree.set_parent(node_ref, kido);
-            if still_polytomy{
+            if still_polytomy {
                 insert_nodes(tree, kido);
-
             }
         }
     }
 }
 
-
 pub mod command_io {
-    use std::path;
-    use std::fs::File;
-    use std::error::Error;
     use csv::Reader;
-
+    use std::error::Error;
+    use std::fs::File;
+    use std::path;
 
     //HashMap<String,HashMap<String,AnnotationValue>>
     pub fn parse_tsv(trait_file: &path::PathBuf) -> Result<Reader<File>, Box<dyn Error>> {
@@ -630,6 +710,6 @@ pub mod command_io {
         // We nest this call in its own scope because of lifetimes.
         debug!("read with headers:{:?}", rdr.headers().unwrap());
 
-        return Ok(rdr);
+        Ok(rdr)
     }
 }

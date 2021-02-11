@@ -1,11 +1,10 @@
-use std::option::Option;
 use super::fixed_tree::FixedNode;
-use std::collections::{HashMap, HashSet};
 use super::AnnotationValue;
 use std::collections::hash_map::Keys;
+use std::collections::{HashMap, HashSet};
+use std::option::Option;
 
 pub type TreeIndex = usize;
-
 
 //TODO think more about missing data. Should these be options? Should they be guaranteed
 #[derive(Debug)]
@@ -20,14 +19,25 @@ pub struct MutableTreeNode {
     pub height: Option<f64>,
     pub annotations: HashMap<String, AnnotationValue>,
     pub number: usize,
-
 }
+
 impl MutableTreeNode {
-    pub(crate) fn new(taxon: Option<String>,
-                      number: usize) -> Self {
-        MutableTreeNode { taxon: taxon, label: None, parent: None, first_child: None, next_sibling: None, previous_sibling: None, length: None, height: None, annotations: HashMap::new(), number }
+    pub(crate) fn new(taxon: Option<String>, number: usize) -> Self {
+        MutableTreeNode {
+            taxon,
+            label: None,
+            parent: None,
+            first_child: None,
+            next_sibling: None,
+            previous_sibling: None,
+            length: None,
+            height: None,
+            annotations: HashMap::new(),
+            number,
+        }
     }
 }
+
 #[derive(Debug)]
 pub struct MutableTree {
     pub nodes: Vec<MutableTreeNode>,
@@ -38,7 +48,6 @@ pub struct MutableTree {
     pub root: Option<TreeIndex>,
     pub heights_known: bool,
     pub branchlengths_known: bool,
-
 }
 
 impl MutableTree {
@@ -56,9 +65,9 @@ impl MutableTree {
         tree.fixed_node_helper(root, None);
         tree.set_root(Some(0));
         tree.calc_node_heights();
-        tree.branchlengths_known=true;
+        tree.branchlengths_known = true;
 
-        return tree;
+        tree
     }
 
     fn fixed_node_helper(&mut self, node: FixedNode, parent: Option<TreeIndex>) {
@@ -73,18 +82,18 @@ impl MutableTree {
             self.set_label(index, label);
         }
 
-        if let Some( annotation_map) = node.annotations {
+        if let Some(annotation_map) = node.annotations {
             for (key, value) in annotation_map.into_iter() {
                 self.annotate_node(index, key, value);
             }
         }
 
-        if node.children.len() > 0 {
+        if !node.children.is_empty() {
             self.internal_nodes.push(index);
         } else {
             self.external_nodes.push(index);
-            if let Some(taxon) = node.taxon.clone() {
-                self.taxon_node_map.insert(taxon.clone(), index);
+            if let Some(taxon) = node.taxon {
+                self.taxon_node_map.insert(taxon, index);
             }
         }
         if let Some(p) = parent {
@@ -92,11 +101,11 @@ impl MutableTree {
             self.set_parent(p, index);
         }
         for child in node.children.into_iter() {
-            self.fixed_node_helper(*child, Some(index));
+            self.fixed_node_helper(child, Some(index));
         }
     }
 
-    pub fn from_tree(tree: & MutableTree, taxa: &HashSet<String>) -> Self {
+    pub fn from_tree(tree: &MutableTree, taxa: &HashSet<String>) -> Self {
         let mut me = MutableTree {
             nodes: Vec::new(),
             external_nodes: Vec::new(),
@@ -107,14 +116,16 @@ impl MutableTree {
             heights_known: false,
             branchlengths_known: false,
         };
-        let root = tree.get_root().expect("every tree should have a root at least nominally");
+        let root = tree
+            .get_root()
+            .expect("every tree should have a root at least nominally");
         me.tree_helper(tree, root, taxa);
-        me.heights_known=true;
+        me.heights_known = true;
         me.calculate_branchlengths();
         me
     }
 
-    pub fn copy_subtree(tree: & MutableTree,node:TreeIndex,taxa: &HashSet<String>) -> Self {
+    pub fn copy_subtree(tree: &MutableTree, node: TreeIndex, taxa: &HashSet<String>) -> Self {
         let mut me = MutableTree {
             nodes: Vec::new(),
             external_nodes: Vec::new(),
@@ -126,11 +137,16 @@ impl MutableTree {
             branchlengths_known: false,
         };
         me.tree_helper(tree, node, taxa);
-        me.heights_known=true;
+        me.heights_known = true;
         me.calculate_branchlengths();
         me
     }
-    fn tree_helper(&mut self, tree: & MutableTree, node: TreeIndex, taxa: &HashSet<String>) -> Option<TreeIndex> {
+    fn tree_helper(
+        &mut self,
+        tree: &MutableTree,
+        node: TreeIndex,
+        taxa: &HashSet<String>,
+    ) -> Option<TreeIndex> {
         let mut new_node = None;
         if tree.get_num_children(node) == 0 {
             //make external node
@@ -155,39 +171,42 @@ impl MutableTree {
             }
             if children.len() > 1 {
                 new_node = Some(self.make_root_node(children));
-            } else {
-                if children.len() == 1 {
-                    return Some(children.remove(0));
-                }
+            } else if children.len() == 1 {
+                return Some(children.remove(0));
             }
         }
         if let Some(new_node_i) = new_node {
-            self.set_height(new_node_i, tree.get_height(node).expect("found a node without a height"));
+            self.set_height(
+                new_node_i,
+                tree.get_height(node)
+                    .expect("found a node without a height"),
+            );
             // copy annotations
             let annotation_map = &tree.get_unwrapped_node(node).annotations;
-            for (key, value) in annotation_map.into_iter() {
+            for (key, value) in annotation_map.iter() {
                 self.annotate_node(new_node_i, key.clone(), value.clone());
             }
         }
         new_node
     }
     pub fn get_height(&self, node: TreeIndex) -> Option<f64> {
-        if let Some(height) = self.get_unwrapped_node(node).height{
+        if let Some(height) = self.get_unwrapped_node(node).height {
             Some(height)
-        }else{
+        } else {
             None
         }
     }
-    pub fn get_node_label(&self, node:TreeIndex)->&Option<String>{
+    pub fn get_node_label(&self, node: TreeIndex) -> &Option<String> {
         &self.get_unwrapped_node(node).label
     }
     fn get_height_safely(&mut self, node: TreeIndex) -> f64 {
         if !self.heights_known {
             self.calc_node_heights();
         }
-        self.get_unwrapped_node(node).height.expect("how did it come to this. I thought heights were trust worthy")
+        self.get_unwrapped_node(node)
+            .height
+            .expect("how did it come to this. I thought heights were trust worthy")
     }
-
 
     pub fn calc_node_heights(&mut self) {
         if !self.heights_known {
@@ -210,12 +229,18 @@ impl MutableTree {
         }
     }
 
-    pub fn calculate_branchlengths(&mut self){
-        self.branchlengths_known=true;
-        let mut i =0;
+    pub fn calculate_branchlengths(&mut self) {
+        self.branchlengths_known = true;
+        let mut i = 0;
         while i < self.nodes.len() {
-            if i!=self.root.expect("how is this tree not rooted"){
-                let length = self.get_height(self.get_parent(i).expect("node does not have a parent in tree")).expect("parent node should have height") - self.get_height(i).expect("node should have height");
+            if i != self.root.expect("how is this tree not rooted") {
+                let length = self
+                    .get_height(
+                        self.get_parent(i)
+                            .expect("node does not have a parent in tree"),
+                    )
+                    .expect("parent node should have height")
+                    - self.get_height(i).expect("node should have height");
                 self.set_length(i, length);
             }
 
@@ -223,12 +248,13 @@ impl MutableTree {
         }
     }
 
-
     fn calc_height_above_root(&mut self) {
-        let  preorder = self.preorder_iter();
+        let preorder = self.preorder_iter();
         for node_ref in preorder {
             if let Some(p) = self.get_parent(node_ref) {
-                let l = self.get_length(node_ref).expect(&*format!("no length on node {}",node_ref));
+                let l = self
+                    .get_length(node_ref)
+                    .expect(&*format!("no length on node {}", node_ref));
                 let pheight = self.get_height(p).unwrap();
                 self.set_height(node_ref, l + pheight);
             } else {
@@ -238,28 +264,27 @@ impl MutableTree {
         }
     }
 
-
     pub fn set_height(&mut self, node_ref: TreeIndex, height: f64) {
         let node = self.get_unwrapped_node_mut(node_ref);
         node.height = Some(height);
         self.branchlengths_known = false;
     }
 
-    fn make_external_node(&mut self, taxon: &String, taxa: &HashSet<String>) -> Option<TreeIndex> {
+    fn make_external_node(&mut self, taxon: &str, taxa: &HashSet<String>) -> Option<TreeIndex> {
         if taxa.contains(taxon) {
             let index = self.nodes.len();
-            let new_node = MutableTreeNode::new(Some(taxon.clone()), index);
+            let new_node = MutableTreeNode::new(Some(taxon.to_string()), index);
             self.nodes.push(new_node);
             self.external_nodes.push(index);
-            self.taxon_node_map.insert(taxon.clone(), index);
+            self.taxon_node_map.insert(taxon.to_string(), index);
 
             Some(index)
         } else {
             None
         }
     }
-/// Make and return an internal node. Provided children will be added to the node in
-/// the order they appear in the input vector;
+    /// Make and return an internal node. Provided children will be added to the node in
+    /// the order they appear in the input vector;
     pub fn make_internal_node(&mut self, children: Vec<TreeIndex>) -> TreeIndex {
         let index = self.nodes.len();
         let new_node = MutableTreeNode::new(None, index);
@@ -267,15 +292,15 @@ impl MutableTree {
         self.internal_nodes.push(index);
         for child in children.into_iter() {
             let child_node = self.get_node_mut(child).unwrap();
-            child_node.next_sibling=None;
-            child_node.previous_sibling=None;
+            child_node.next_sibling = None;
+            child_node.previous_sibling = None;
             self.add_child(index, child);
             self.set_parent(index, child)
         }
         index
     }
     fn make_root_node(&mut self, children: Vec<TreeIndex>) -> TreeIndex {
-        let index=self.make_internal_node(children);
+        let index = self.make_internal_node(children);
         self.set_root(Some(index));
         index
     }
@@ -292,19 +317,23 @@ impl MutableTree {
         if let Some(first_child) = parent_node.first_child {
             let mut sibling_node = self.get_node_mut(first_child).expect("Node not in tree");
             while let Some(sibling) = sibling_node.next_sibling {
-                sibling_node = self.get_node_mut(sibling).expect("expected sibling node to be in the tree");
+                sibling_node = self
+                    .get_node_mut(sibling)
+                    .expect("expected sibling node to be in the tree");
             }
             sibling_node.next_sibling = Some(child);
             let previous_sib_i = sibling_node.number;
             let mut child_node = self.get_node_mut(child).expect("node not in tree");
             child_node.previous_sibling = Some(previous_sib_i);
         } else {
-            let mut parent_node = self.get_node_mut(parent).expect("parent to be part of the tree");
+            let mut parent_node = self
+                .get_node_mut(parent)
+                .expect("parent to be part of the tree");
             parent_node.first_child = Some(child);
         }
     }
 
-    pub fn remove_child(&mut self, parent: TreeIndex, child: TreeIndex) ->Option<TreeIndex> {
+    pub fn remove_child(&mut self, parent: TreeIndex, child: TreeIndex) -> Option<TreeIndex> {
         let mut successful_removal = true;
         let child_node = self.get_unwrapped_node(child);
         if let Some(previous_slibling_i) = child_node.previous_sibling {
@@ -343,7 +372,7 @@ impl MutableTree {
             mut_child.next_sibling = None;
             mut_child.previous_sibling = None;
             Some(child)
-        }else {
+        } else {
             None
         }
     }
@@ -359,17 +388,21 @@ impl MutableTree {
         self.nodes.get_mut(index)
     }
     fn get_unwrapped_node(&self, index: TreeIndex) -> &MutableTreeNode {
-        return self.get_node(index).expect(&*format!("node {} not in tree", index));
+        return self
+            .get_node(index)
+            .expect(&*format!("node {} not in tree", index));
     }
     fn get_unwrapped_node_mut(&mut self, index: TreeIndex) -> &mut MutableTreeNode {
-        return self.get_node_mut(index).expect(&*format!("node {} not in tree", index));
+        return self
+            .get_node_mut(index)
+            .expect(&*format!("node {} not in tree", index));
     }
 
-    pub fn get_taxon(&self, node_ref:TreeIndex) ->Option<&str>{
+    pub fn get_taxon(&self, node_ref: TreeIndex) -> Option<&str> {
         let node = self.get_unwrapped_node(node_ref);
-        if let Some(taxon) = &node.taxon{
+        if let Some(taxon) = &node.taxon {
             Some(taxon.as_str())
-        }else{
+        } else {
             None
         }
     }
@@ -388,18 +421,14 @@ impl MutableTree {
         let mut count = 0;
         let parent_node = self.get_unwrapped_node(node_ref);
         if let Some(first_child) = parent_node.first_child {
-            count+=1;
+            count += 1;
             let mut sibling_node = self.get_unwrapped_node(first_child);
-            loop {
-                if let Some(sibling) = sibling_node.next_sibling {
-                    sibling_node = self.get_unwrapped_node(sibling);
-                    count += 1;
-                } else {
-                    break;
-                }
+            while let Some(sibling) = sibling_node.next_sibling {
+                sibling_node = self.get_unwrapped_node(sibling);
+                count += 1;
             }
         }
-        return count;
+        count
     }
     pub fn get_child(&self, node_ref: TreeIndex, index: usize) -> Option<TreeIndex> {
         let mut count = 0;
@@ -409,19 +438,15 @@ impl MutableTree {
                 return Some(first_child);
             }
             let mut sibling_node = self.get_unwrapped_node(first_child);
-            loop {
-                if let Some(sibling) = sibling_node.next_sibling {
-                    sibling_node = self.get_unwrapped_node(sibling);
-                    count += 1;
-                    if count == index {
-                        return Some(sibling);
-                    }
-                } else {
-                    break;
+            while let Some(sibling) = sibling_node.next_sibling {
+                sibling_node = self.get_unwrapped_node(sibling);
+                count += 1;
+                if count == index {
+                    return Some(sibling);
                 }
             }
         }
-        return None;
+        None
     }
     pub fn get_external_node(&self, index: usize) -> Option<&MutableTreeNode> {
         self.nodes.get(self.external_nodes[index])
@@ -430,23 +455,18 @@ impl MutableTree {
         self.nodes.get(self.internal_nodes[index])
     }
 
-    pub fn get_children(&self,node:TreeIndex)->Vec<TreeIndex>{
-        let mut kids:Vec<TreeIndex> = vec![];
+    pub fn get_children(&self, node: TreeIndex) -> Vec<TreeIndex> {
+        let mut kids: Vec<TreeIndex> = vec![];
         let parent_node = self.get_unwrapped_node(node);
         if let Some(first_child) = parent_node.first_child {
             kids.push(first_child);
             let mut sibling_node = self.get_unwrapped_node(first_child);
-            loop {
-                if let Some(sibling) = sibling_node.next_sibling {
-                    kids.push(sibling);
-                    sibling_node = self.get_unwrapped_node(sibling);
-
-                } else {
-                    break;
-                }
+            while let Some(sibling) = sibling_node.next_sibling {
+                kids.push(sibling);
+                sibling_node = self.get_unwrapped_node(sibling);
             }
         }
-        return kids;
+        kids
     }
     pub fn get_next_sibling(&self, index: TreeIndex) -> &Option<TreeIndex> {
         let node = self.get_unwrapped_node(index);
@@ -456,7 +476,7 @@ impl MutableTree {
         let node = self.get_unwrapped_node(index);
         &node.previous_sibling
     }
-    pub fn get_first_child(&self,index:TreeIndex)->&Option<TreeIndex>{
+    pub fn get_first_child(&self, index: TreeIndex) -> &Option<TreeIndex> {
         let node = self.get_unwrapped_node(index);
         &node.first_child
     }
@@ -465,15 +485,15 @@ impl MutableTree {
         if let Some(p) = node.parent {
             return Some(p);
         }
-        return None;
+        None
     }
-    pub fn set_label(&mut self, index:TreeIndex, label:String){
+    pub fn set_label(&mut self, index: TreeIndex, label: String) {
         let node = self.get_node_mut(index).expect("node not in tree");
         node.label = Some(label);
     }
 
     pub fn set_length(&mut self, index: TreeIndex, bl: f64) {
-        self.heights_known=false;
+        self.heights_known = false;
         let node = self.get_node_mut(index).expect("node not in tree");
         node.length = Some(bl);
     }
@@ -492,8 +512,8 @@ impl MutableTree {
     pub fn get_annotation_keys(&self) -> Keys<'_, String, AnnotationValue> {
         self.annotation_type.keys()
     }
-    pub fn is_external(&self, node_ref:TreeIndex)->bool{
-         self.get_unwrapped_node(node_ref).first_child.is_none()
+    pub fn is_external(&self, node_ref: TreeIndex) -> bool {
+        self.get_unwrapped_node(node_ref).first_child.is_none()
     }
     pub fn get_root(&self) -> Option<TreeIndex> {
         self.root
@@ -503,7 +523,7 @@ impl MutableTree {
             let value_type = std::mem::discriminant(&value);
             let annotation_type = std::mem::discriminant(annotation);
             if value_type == annotation_type {
-                let  node = self.get_unwrapped_node_mut(index);
+                let node = self.get_unwrapped_node_mut(index);
                 node.annotations.insert(key, value);
             } else {
                 panic!("tried to annotate node with an missmatched annotation type");
@@ -511,17 +531,22 @@ impl MutableTree {
         } else {
             match value {
                 AnnotationValue::Discrete(_) => {
-                    self.annotation_type.insert(key.clone(), AnnotationValue::Discrete("".to_string()));
+                    self.annotation_type
+                        .insert(key.clone(), AnnotationValue::Discrete("".to_string()));
                 }
                 AnnotationValue::Continuous(_) => {
-                    self.annotation_type.insert(key.clone(), AnnotationValue::Continuous(0.0));
+                    self.annotation_type
+                        .insert(key.clone(), AnnotationValue::Continuous(0.0));
                 }
                 AnnotationValue::Set(_) => {
                     //TODO check internal types
-                    self.annotation_type.insert(key.clone(), AnnotationValue::Set(vec![AnnotationValue::Discrete("0".to_string())]));
+                    self.annotation_type.insert(
+                        key.clone(),
+                        AnnotationValue::Set(vec![AnnotationValue::Discrete("0".to_string())]),
+                    );
                 }
             }
-            let  node = self.get_unwrapped_node_mut(index);
+            let node = self.get_unwrapped_node_mut(index);
             node.annotations.insert(key, value);
         }
     }
@@ -534,32 +559,30 @@ impl MutableTree {
         let node = self.get_unwrapped_node(index);
         &node.label
     }
-    pub fn get_taxon_node(&self, taxon: &String) -> Option<usize> {
+    pub fn get_taxon_node(&self, taxon: &str) -> Option<usize> {
         if let Some(i) = self.taxon_node_map.get(taxon) {
-            return Some(*i);
+            Some(*i)
         } else {
-            return None;
+            None
         }
     }
 }
 //TODO I don't like that this is not lazy
 
 pub struct PreOrderIterator {
-    stack: Vec<TreeIndex>
+    stack: Vec<TreeIndex>,
 }
 
 impl PreOrderIterator {
     pub fn new(root: Option<TreeIndex>, tree: &MutableTree) -> Self {
-        let mut local_stack:Vec<TreeIndex>;
+        let mut local_stack: Vec<TreeIndex>;
         if let Some(index) = root {
-             local_stack = vec![index];
+            local_stack = vec![index];
         } else {
             let root = tree.get_root().expect("each tree should have a root");
             local_stack = vec![root];
         }
-        let mut me = PreOrderIterator {
-            stack: vec![]
-        };
+        let mut me = PreOrderIterator { stack: vec![] };
 
         while let Some(node_index) = local_stack.pop() {
             if let Some(node) = tree.get_node(node_index) {
@@ -580,7 +603,7 @@ impl Iterator for PreOrderIterator {
     type Item = TreeIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.stack.len() > 0 {
+        if !self.stack.is_empty() {
             Some(self.stack.remove(0))
         } else {
             None
@@ -593,5 +616,3 @@ impl DoubleEndedIterator for PreOrderIterator {
         self.stack.pop()
     }
 }
-
-
