@@ -1,202 +1,134 @@
 // Needed by pest
 use crate::tree::fixed_tree::FixedNode;
 use crate::tree::AnnotationValue;
-use pest_consume::{match_nodes, Error, Parser};
 use std::collections::HashMap;
+use crate::io::Error::IoError;
+use crate::tree::mutable_tree::{MutableTree, MutableTreeNode};
+use std::str::Chars;
 
-#[derive(Parser)]
-#[grammar = "./io/parser/newick.pest"]
-pub struct NewickParser;
-
-type Result<T> = std::result::Result<T, Error<Rule>>;
-type Node<'i> = pest_consume::Node<'i, Rule, ()>;
-
-#[pest_consume::parser]
-impl NewickParser {
-    fn branchlength(input: Node) -> Result<f64> {
-        input
-            .as_str()
-            .parse::<f64>()
-            // `input.error` links the error to the location in the input file where it occurred.
-            .map_err(|e| input.error(e))
-    }
-    fn length(input: Node) -> Result<f64> {
-        Ok(match_nodes!(input.into_children();
-            [branchlength(n)] =>n
-        ))
-    }
-    fn name(input: Node) -> Result<String> {
-        let name = input.as_str();
-        Ok(name.to_string())
-    }
-    // fn label(input: Node) -> Result<String> {
-    //     let name = input.as_str();
-    //     Ok(name.to_string())
-    // }
-    fn leaf(input: Node) -> Result<FixedNode> {
-        let mut tip = FixedNode::new();
-        let name = input.as_str();
-        tip.taxon = Some(name.to_string());
-        Ok(tip)
-    }
-    fn branch(input: Node) -> Result<FixedNode> {
-        Ok(match_nodes!(input.into_children();
-            [subtree(mut n),node_annotation(a),length(l)]=>{
-            n.length=Some(l);
-            n.annotations=Some(a);
-            n},
-            [subtree(mut n),node_annotation(a)]=>{
-            n.annotations=Some(a);
-            n.length=Some(0.0);
-            warn!("branchlength 0 inserted for branch without length");
-            n
-            },
-            [subtree(mut n),length(l)]=>{n.length=Some(l);n},
-            [subtree(mut n)]=>{
-            n.length=Some(0.0);
-            warn!("branchlength 0 inserted for branch without length");
-            n
-            }
-        ))
-    }
-    fn annotation(input: Node) -> Result<(String, AnnotationValue)> {
-        Ok(match_nodes!(input.into_children();
-            [key(k),value(v)]=>(k,v),
-        ))
-    }
-    fn annotation_set(input: Node) -> Result<Vec<(String, AnnotationValue)>> {
-        let mut annotations = vec![];
-        Ok(match_nodes!(input.into_children();
-            [annotation(a)]=>{
-                annotations.push(a);
-                annotations
-            },
-            [annotation(a),annotation_set(others)]=>{
-                annotations.push(a);
-                for other in others{
-                    annotations.push(other);
-            }
-            annotations
-        }
-        ))
-    }
-
-    fn node_annotation(input: Node) -> Result<HashMap<String, AnnotationValue>> {
-        Ok(match_nodes!(input.into_children();
-            [annotation_set(annotations)]=>{
-                let mut annotation_map = HashMap::new();
-                for (key,value) in annotations{
-                    annotation_map.insert(key,value);
-                }
-                annotation_map
-            }
-        ))
-    }
-
-    fn key(input: Node) -> Result<String> {
-        let name = input.as_str();
-        Ok(name.to_string())
-    }
-
-    fn value(input: Node) -> Result<AnnotationValue> {
-        Ok(match_nodes!(input.into_children();
-            [continuous(n)]=>n,
-            [discrete(n)]=>n,
-            [set(n)]=>n
-        ))
-    }
-    fn one_entry(input: Node) -> Result<AnnotationValue> {
-        Ok(match_nodes!(input.into_children();
-            [continuous(n)]=>n,
-            [discrete(n)]=>n
-        ))
-    }
-    fn continuous(input: Node) -> Result<AnnotationValue> {
-        let x = input
-            .as_str()
-            .parse::<f64>()
-            // `input.error` links the error to the location in the input file where it occurred.
-            .map_err(|e| input.error(e));
-
-        Ok(AnnotationValue::Continuous(x.unwrap()))
-    }
-    fn discrete(input: Node) -> Result<AnnotationValue> {
-        let name = input.as_str().to_string();
-        Ok(AnnotationValue::Discrete(name))
-    }
-    fn set(input: Node) -> Result<AnnotationValue> {
-        let set = match_nodes!(input.into_children();
-            [one_entry(n)..]=>n.collect(),
-        );
-        Ok(AnnotationValue::Set(set))
-    }
-
-    fn branchset(input: Node) -> Result<Vec<FixedNode>> {
-        let mut children: Vec<FixedNode> = vec![];
-        Ok(match_nodes!(input.into_children();
-            [branch(child)]=>{
-            children.push(child);
-            children
-            },
-            [branch(child),branchset(siblings)]=>{
-                children.push(child);
-                for sibling in siblings{
-                    children.push(sibling);
-                }
-                children
-            }
-        ))
-    }
-    //returns a node with name and children
-    fn internal(input: Node) -> Result<FixedNode> {
-        let mut internal = FixedNode::new();
-        Ok(match_nodes!(input.into_children();
-        [branchset(children)]=>{
-            for child in children{
-                internal.children.push(child)
-            };
-            internal
-           },
-          [branchset(children),name(n)]=>{
-             for child in children{
-                internal.children.push(child)
-            };
-            internal.label=Some(n);
-            internal
-          }
-        ))
-    }
-
-    //Just pass the leaf or internal node back to the parent
-    fn subtree(input: Node) -> Result<FixedNode> {
-        Ok(match_nodes!(input.into_children();
-            [leaf(tip)]=>tip,
-            [internal(node)]=>node
-        ))
-    }
-
-    fn tree(input: Node) -> Result<FixedNode> {
-        Ok(match_nodes!(input.into_children();
-        [subtree(root)] =>{root},
-        [branch(root)]=>{root}
-        ))
-    }
+pub struct NewickParser<'a> {
+    last_token:Option<char>,
+    tree:MutableTree,
+    reader:Chars<'a>
 }
 
-impl NewickParser {
-    pub fn parse_tree(str: &str) -> Result<FixedNode> {
+type Result<T> = std::result::Result<T, IoError>;
+
+/*
+This is model after the newick importer in BEAST
+TODO fill in the rest
+ */
+impl <'a> NewickParser {
+    fn parse_tree(str:& 'a str)->Result<MutableTree>{
         let start = std::time::Instant::now();
-        let inputs = NewickParser::parse(Rule::tree, str)?;
-        // There should be a single root node in the parsed tree
-        let input = inputs.single()?;
-        let root = NewickParser::tree(input);
+       let mut parser = NewickParser{
+            last_token: None,
+            //TODO better cleaner api through new.
+            tree: MutableTree {
+                nodes: vec![],
+                external_nodes: vec![],
+                internal_nodes: vec![],
+                annotation_type: Default::default(),
+                taxon_node_map: Default::default(),
+                root: None,
+                heights_known: false,
+                branchlengths_known: false
+            },
+            reader: str.chars()
+        };
+        parser.skip_until('(');
+        parser.unread_token('(');
+
+        let root = parser.read_internal_node();
+        //TODO hide node/node ref api
+        parser.tree.set_root(Some(root.number));
+
         trace!(
             "Tree parsed in {} milli seconds ",
             start.elapsed().as_millis()
         );
-        root
+        Ok(parser.tree)
     }
+    
+    fn read_internal_node(&mut self)->&MutableTreeNode{
+        unimplemented!()
+    }
+    fn read_external_node(&mut self)->&MutableTreeNode{
+    unimplemented!()
+    }
+    fn read_branch(&mut self)->&MutableTreeNode{
+        unimplemented!()
+    }
+    fn unread_token(&mut self,c:char){
+        self.last_token = Some(c);
+    }
+    fn next_token(&mut self)->Result<char>{
+        match self.last_token{
+            None=>{
+                c = self.read_token()?;
+                self.last_token=Some(c);
+                Ok(c)
+            },
+            Some(c)=>{
+                Ok(c)
+            }
+        }
+
+    }
+    fn read_token(&mut self)->Result<char>{
+        self.skip_space();
+        ch = self.read();
+        // while hasComments && (ch == startComment || ch == lineComment) {
+        while hasComments && (ch == '[') {
+            self.skip_comments(ch);
+            self.skip_space();
+            ch = self.read();
+        }
+
+        ch
+    }
+    
+    fn next(&mut self)->Result<char>{
+        match self.last_token{
+            None=>{
+                c = self.read()?;
+                self.last_token=Some(c);
+                Ok(c)
+            },
+            Some(c)=>{
+                Ok(c)
+            }
+        }
+    }
+    fn read(& mut self)->Result<char>{
+        match self.last_token{
+            None=>{
+               if let Some(c) = self.reader.next(){
+                   Ok(c)
+               }else{
+                   Err(IoError)
+               }
+            },
+            Some(c)=>{
+                self.last_token=None;
+                Ok(c)
+            }
+        }
+    }
+
+    fn skip_space(&mut self){
+        unimplemented!()
+    }
+    fn skip_comments(&mut self,c:char){
+        unimplemented!()
+    }
+
+    fn skip_until(&mut self,c:char){
+        unimplemented!()
+    }
+
 }
+
 
 #[cfg(test)]
 mod tests {

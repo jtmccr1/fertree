@@ -2,3 +2,4 @@
 pub mod parser;
 mod serialization;
 pub mod writer;
+pub mod Error;
