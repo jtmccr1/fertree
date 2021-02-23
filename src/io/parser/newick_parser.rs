@@ -1,15 +1,110 @@
 // Needed by pest
 use crate::tree::AnnotationValue;
 use std::collections::HashMap;
-use crate::io::Error::IoError;
 use crate::tree::mutable_tree::{MutableTree, TreeIndex};
 use std::str::Chars;
+use crate::io::error::IoError;
+use pest_consume::{match_nodes, Error, Parser};
 
+
+type PestResult<T> = std::result::Result<T, Error<Rule>>;
+type Node<'i> = pest_consume::Node<'i, Rule, ()>;
+
+#[derive(Parser)]
+#[grammar = "./io/parser/tree_annotation.pest"]
+pub struct AnnotationParser;
+
+
+
+#[pest_consume::parser]
+impl AnnotationParser {
+    fn annotation(input: Node) -> PestResult<(String, AnnotationValue)> {
+        Ok(match_nodes!(input.into_children();
+            [key(k),value(v)]=>(k,v),
+        ))
+    }
+    fn annotation_set(input: Node) -> PestResult<Vec<(String, AnnotationValue)>> {
+        let mut annotations = vec![];
+        Ok(match_nodes!(input.into_children();
+            [annotation(a)]=>{
+                annotations.push(a);
+                annotations
+            },
+            [annotation(a),annotation_set(others)]=>{
+                annotations.push(a);
+                for other in others{
+                    annotations.push(other);
+            }
+            annotations
+        }
+        ))
+    }
+
+    fn node_annotation(input: Node) -> PestResult<HashMap<String, AnnotationValue>> {
+        Ok(match_nodes!(input.into_children();
+            [annotation_set(annotations)]=>{
+                let mut annotation_map = HashMap::new();
+                for (key,value) in annotations{
+                    annotation_map.insert(key,value);
+                }
+                annotation_map
+            }
+        ))
+    }
+
+    fn key(input: Node) -> PestResult<String> {
+        let name = input.as_str();
+        Ok(name.to_string())
+    }
+
+    fn value(input: Node) -> PestResult<AnnotationValue> {
+        Ok(match_nodes!(input.into_children();
+            [continuous(n)]=>n,
+            [discrete(n)]=>n,
+            [set(n)]=>n
+        ))
+    }
+    fn one_entry(input: Node) -> PestResult<AnnotationValue> {
+        Ok(match_nodes!(input.into_children();
+            [continuous(n)]=>n,
+            [discrete(n)]=>n
+        ))
+    }
+    fn continuous(input: Node) -> PestResult<AnnotationValue> {
+        let x = input
+            .as_str()
+            .parse::<f64>()
+            // `input.error` links the error to the location in the input file where it occurred.
+            .map_err(|e| input.error(e));
+
+        Ok(AnnotationValue::Continuous(x.unwrap()))
+    }
+    fn discrete(input: Node) -> PestResult<AnnotationValue> {
+        let name = input.as_str().to_string();
+        Ok(AnnotationValue::Discrete(name))
+    }
+    fn set(input: Node) -> PestResult<AnnotationValue> {
+        let set = match_nodes!(input.into_children();
+            [one_entry(n)..]=>n.collect(),
+        );
+        Ok(AnnotationValue::Set(set))
+    }
+}
+impl AnnotationParser{
+    fn parse_annotation(s:&str) ->PestResult<HashMap<String,AnnotationValue>>{
+        let inputs = AnnotationParser::parse(Rule::node_annotation, s)?;
+        // There should be a single root node in the parsed tree
+        let input = inputs.single()?;
+        AnnotationParser::node_annotation(input)
+    }
+}
+#[derive(Debug)]
 pub struct NewickParser<'a> {
     last_token:Option<char>,
     tree:MutableTree,
     reader:Chars<'a>,
-    last_deliminator:char
+    last_deliminator:char,
+    last_annotation:Option<HashMap<String,AnnotationValue>>
 }
 
 type Result<T> = std::result::Result<T, IoError>;
@@ -19,7 +114,7 @@ This is model after the newick importer in BEAST
 TODO fill in the rest
  */
 impl  NewickParser<'_> {
-    pub fn parse_tree(str:&'static str)->Result<MutableTree>{
+    pub fn parse_tree(input_string:String)->Result<MutableTree>{
         let start = std::time::Instant::now();
        let mut parser = NewickParser{
             last_token: None,
@@ -34,10 +129,10 @@ impl  NewickParser<'_> {
                 heights_known: false,
                 branchlengths_known: false
             },
-            reader: str.chars(),
+            reader: input_string.chars(),
+           last_annotation:None,
            last_deliminator:'\0'
         };
-
 
         parser.skip_until('(')?;
         parser.unread_token('(');
@@ -45,12 +140,19 @@ impl  NewickParser<'_> {
         let root = parser.read_internal_node()?;
         //TODO hide node/node ref api
         parser.tree.set_root(Some(root));
+        parser.tree.branchlengths_known=true;
 
-        trace!(
-            "Tree parsed in {} milli seconds ",
-            start.elapsed().as_millis()
-        );
-        Ok(parser.tree)
+        match parser.last_deliminator{
+            ')'=>Err(IoError),
+            ';'=>{
+                trace!(
+                    "Tree parsed in {} milli seconds ",
+                    start.elapsed().as_millis()
+                );
+                Ok(parser.tree)
+            },
+            _=>Err(IoError)
+        }
     }
 
     fn read_internal_node(&mut self)->Result<TreeIndex>{
@@ -69,18 +171,24 @@ impl  NewickParser<'_> {
             // throw new BadFormatException("Missing closing ')' in tree");
             Err(IoError)
         }else{
-            //TODO read label here
-
-            Ok(self.tree.make_internal_node(children))
+            let label= self.read_to_token(",:();")?;
+            let node = self.tree.make_internal_node(children);
+            if !label.is_empty(){
+                self.tree.label_node(node, label);
+            }
+            self.annotation_node(node);
+            //TODO root branch length?
+            Ok(node)
         }
     }
     fn read_external_node(&mut self)->Result<TreeIndex>{
-        let label= self.read_to_token(":();")?;
+        let label= self.read_to_token(",:();")?;
+        let node = self.tree.make_external_node(label.as_str(),None).expect("Failed to make tip");
+        self.annotation_node(node);
 
-        Ok(self.tree.make_external_node(label.as_str(),None).expect("Failed to make tip"))
+        Ok(node)
     }
     fn read_branch(&mut self)->Result<TreeIndex>{
-
         let mut length = 0.0;
 
         let branch= if self.next_token()? == '(' {
@@ -95,6 +203,7 @@ impl  NewickParser<'_> {
 
         if self.last_deliminator ==':' {
             length = self.read_double(",():;")?;
+            self.annotation_node(branch);
         }
 
         self.tree.set_length(branch, length);
@@ -120,12 +229,12 @@ impl  NewickParser<'_> {
 
     }
     fn read_token(&mut self)->Result<char>{
-        self.skip_space();
+        self.skip_space()?;
         let mut ch = self.read()?;
         // while hasComments && (ch == startComment || ch == lineComment) {
         while ch == '[' {
-            self.skip_comments(ch);
-            self.skip_space();
+            self.skip_comments(ch)?;
+            self.skip_space()?;
             ch = self.read()?;
         }
 
@@ -152,9 +261,9 @@ impl  NewickParser<'_> {
                 if ch==ch2{
                     token.push(ch);
                 }else{
-                    self.last_deliminator=' ';
+                    // self.last_deliminator=' ';
                     self.unread_token(ch2);
-                    done=true;
+                    // done=true;
                     quoted=false;
                 }
             }else if first && (ch=='\'' || ch=='"'){
@@ -163,8 +272,8 @@ impl  NewickParser<'_> {
                 first=false;
                 space=0;
             }else if ch=='['{
-                self.skip_comments(ch);
-                self.last_deliminator=' ';
+                self.skip_comments(ch)?;
+                // self.last_deliminator=' ';
                 done=true
             }else{
                 if quoted{
@@ -189,11 +298,10 @@ impl  NewickParser<'_> {
                 }
             }
         }
-
         if self.last_deliminator.is_whitespace(){
             ch = self.next_token()?;
             while ch.is_whitespace(){
-                self.read();
+                self.read()?;
                 ch=self.next_token()?;
             }
             if !deliminator.contains(ch){
@@ -202,8 +310,6 @@ impl  NewickParser<'_> {
         }
 
         Ok(token)
-
-
 
     }
 
@@ -217,18 +323,6 @@ impl  NewickParser<'_> {
         }
     }
 
-    fn next(&mut self)->Result<char>{
-        match self.last_token{
-            None=>{
-                let c = self.read()?;
-                self.last_token=Some(c);
-                Ok(c)
-            },
-            Some(c)=>{
-                Ok(c)
-            }
-        }
-    }
     fn read(& mut self)->Result<char>{
         match self.last_token{
             None=>{
@@ -246,16 +340,26 @@ impl  NewickParser<'_> {
     }
 
     fn skip_space(&mut self)->Result<()>{
-        let mut ch:char = self.read_token()?;
+        let mut ch:char = self.read()?;
         while ch.is_whitespace(){
-            ch = self.read_token()?;
+            ch = self.read()?;
         }
         self.unread_token(ch);
         Ok(())
     }
     fn skip_comments(&mut self,c:char)->Result<()>{
-        unimplemented!()
-        //TODO set up hashmap of annotations
+        let mut comment = String::from(c);
+        comment.push_str(self.read_to_token("(),:;")?.as_str());
+        while self.last_deliminator==' '{
+            comment.push_str(self.read_to_token("(),:;")?.as_str());
+        };
+        if let Ok(annotation) = AnnotationParser::parse_annotation(comment.as_str()){
+            self.last_annotation = Some(annotation);
+            Ok(())
+        }else{
+            Err(IoError)
+        }
+
     }
 
     fn skip_until(&mut self,c:char)->Result<char>{
@@ -266,8 +370,13 @@ impl  NewickParser<'_> {
             Ok(ch)
     }
 
-    fn get_last_deliminator(&self) ->char{
-        self.last_deliminator
+    fn annotation_node(&mut self,nodeRef:TreeIndex){
+        if self.last_annotation.is_some(){
+            let annotation_map = self.last_annotation.take().unwrap();
+            for (key, value) in annotation_map.into_iter() {
+                self.tree.annotate_node(nodeRef, key, value);
+            }
+        }
     }
 
 }
@@ -278,68 +387,71 @@ mod tests {
     use crate::io::parser::newick_parser::NewickParser;
 
     #[test]
-    fn it_works() {
-        let root = NewickParser::parse_tree("(a:1,b:4)l:5;").unwrap();
-        assert_eq!(root.label.unwrap(), "l");
+    fn general_parse() {
+        let tree = NewickParser::parse_tree("(a:1,b:4)l;".to_string()).unwrap();
+        let root = tree.get_root().unwrap();
+        let label = tree.get_label(root).unwrap();
+        assert_eq!( label,"l");
         let mut names = vec![];
-        for child in root.children.iter() {
-            if let Some(t) = &child.taxon {
+        for child in tree.get_children(root).iter() {
+            if let Some(t) = tree.get_taxon(*child) {
                 names.push(t)
             }
         }
         assert_eq!(names, vec!["a", "b"]);
 
         let mut bl = vec![];
-        if let Some(l) = root.length {
+        if let Some(l) = tree.get_length(root) {
             bl.push(l);
         }
-        for child in root.children.iter() {
-            if let Some(t) = child.length {
+        for child in tree.get_children(root).iter() {
+            if let Some(t) = tree.get_length(*child) {
                 bl.push(t)
             }
         }
-        assert_eq!(bl, vec![5.0, 1.0, 4.0]);
+        assert_eq!(bl, vec![ 1.0, 4.0]);
     }
 
     #[test]
     fn scientific() {
-        let root = NewickParser::parse_tree("(a:1E1,b:+2e-5)l:5e-1;").unwrap();
+        let tree = NewickParser::parse_tree("(a:1E1,b:2e-5)l;".to_string()).unwrap();
+        let root = tree.get_root().unwrap();
         let mut bl = vec![];
-        if let Some(l) = root.length {
+        if let Some(l) = tree.get_length(root) {
             bl.push(l);
         }
-        for child in root.children.iter() {
-            if let Some(t) = child.length {
+        for child in tree.get_children(root).iter() {
+            if let Some(t) = tree.get_length(*child) {
                 bl.push(t)
             }
         }
-        assert_eq!(bl, vec![0.5, 10.0, 0.00002]);
+        assert_eq!(bl, vec![10.0, 0.00002]);
     }
 
     #[test]
     fn quoted() {
-       assert!(true, NewickParser::parse_tree("('234] ','here a *');").is_ok());
+       assert!(true, NewickParser::parse_tree("('234] ':1,'here a *':1);".to_string()).is_ok());
     }
 
     #[test]
-    fn annotation() {
-        assert!(NewickParser::parse_tree("(a[&test=ok],b:1);").is_ok());
+    fn comment() {
+        assert!(NewickParser::parse_tree("(a[&test=ok],b:1);".to_string()).is_ok());
     }
 
     #[test]
     fn whitespace() {
-        assert!(NewickParser::parse_tree("  (a[&test=ok],b:1);\t").is_ok());
+        assert!(NewickParser::parse_tree("  (a,b:1);\t".to_string()).is_ok());
     }
 
     #[test]
     fn should_error() {
-        let out = NewickParser::parse_tree("('234] ','here a *')");
+        let out = NewickParser::parse_tree("('234] ','here a *')".to_string());
         assert_eq!(true, out.is_err())
     }
 
     #[test]
     fn should_error_again() {
-        let out = NewickParser::parse_tree("(a,b));");
+        let out = NewickParser::parse_tree("(a,b));".to_string());
         assert_eq!(true, out.is_err())
     }
 }

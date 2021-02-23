@@ -23,7 +23,10 @@ fn write_node(tree: &MutableTree, node_ref: TreeIndex) -> String {
     let mut s = String::new();
     if tree.is_external(node_ref) {
         if let Some(taxon_string) = tree.get_taxon(node_ref) {
+            let quoted = taxon_string.contains(char::is_whitespace);
+            if quoted{s.push('\'')}
             s.push_str(taxon_string);
+            if quoted{s.push('\'')}
         }
     } else {
         s.push('(');
@@ -106,15 +109,13 @@ mod tests {
     #[test]
     fn tree_with_annotations() {
         let s = "((A[&location=UK]:0.3,B[&location=USA]:0.05):0.9,C[&location=US]:0.1);";
-        let root = NewickParser::parse_tree(s).expect("error in parsing");
-        let tree = MutableTree::from_fixed_node(root);
+        let tree = NewickParser::parse_tree(s.to_string()).expect("error in parsing");
         assert_eq!(s, tree.to_string())
     }
     #[test]
     fn tree_with_label() {
         let s = "((A[&location=UK]:0.3,B[&location=USA]:0.05)label:0.9,C[&location=US]:0.1);";
-        let root = NewickParser::parse_tree(s).expect("error in parsing");
-        let tree = MutableTree::from_fixed_node(root);
+        let tree = NewickParser::parse_tree(s.to_string()).expect("error in parsing");
         println!("{:?}", tree.get_internal_node(1));
         assert_eq!(s, tree.to_string())
     }
@@ -122,8 +123,8 @@ mod tests {
     #[test]
     fn tree_with_quotes() {
         let s = "((A[&location=UK]:0.3,B[&location=USA]:0.05):0.9,'C d'[&location=US]:0.1);";
-        let root = NewickParser::parse_tree(s).expect("error in parsing");
-        let tree = MutableTree::from_fixed_node(root);
+        let tree = NewickParser::parse_tree(s.to_string()).expect("error in parsing");
+        println!("{}",tree);
         assert_eq!(s, tree.to_string())
     }
 }

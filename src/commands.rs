@@ -466,9 +466,8 @@ pub(crate) mod stats {
         writeln!(handle, "nodes\ttips\trootHeight\tsumbl\tmeanbl")?;
 
         for parsed_tree in trees {
-            let tree = parsed_tree?;
+            let mut tree = parsed_tree?;
             let root = tree.get_root().unwrap();
-            let root_height = tree.get_height(root).unwrap();
             let nodes = tree.get_node_count();
             // let internal = tree.get_internal_node_count();
             let tips = tree.get_external_node_count();
@@ -485,6 +484,8 @@ pub(crate) mod stats {
             }
             let sum_bl = bl.iter().fold(0.0, |acc, x| acc + x);
             let mean_bl = sum_bl / ((tree.get_node_count() as f64) - 1.0); //no branch on root
+            tree.calc_node_heights();
+            let root_height = tree.get_height(root).unwrap();
             writeln!(
                 handle,
                 "{}\t{}\t{:.2e}\t{:.2e}\t{:.2e}",
@@ -549,7 +550,12 @@ pub mod resolve {
     // collect all poltyomies and child vectors in a stuct
     // set heights
     fn resolve(tree: &mut MutableTree, cmd: &SubCommands) {
-        tree.calc_node_heights();
+        match cmd{
+            SubCommands::Evenly=>{
+                tree.calc_node_heights();
+            }
+            _ => {}
+        }
         let mut polytomies = tree
             .internal_nodes
             .iter()
@@ -582,14 +588,14 @@ pub mod resolve {
                 debug!(
                     "done setting branch lengths \n heights known : {} - lengths known: {}",
                     tree.heights_known, tree.branchlengths_known
-                )
+                );
             }
             SubCommands::Evenly => {
+
                 debug!(
                     "about to set  setting node heights \n heights known : {} - lengths known: {}",
                     tree.heights_known, tree.branchlengths_known
                 );
-
                 for polytomy in polytomies.iter_mut() {
                     // scootch the root node up a little
 
@@ -702,8 +708,10 @@ pub mod resolve {
         #[test]
         fn zero() {
             let tree_string = "((A:1,(B:1,C:1,D:1):1,E:1):1,F:1,G:1);";
-            let mut tree = MutableTree::from_fixed_node(NewickParser::parse_tree(tree_string).unwrap());
+            let mut tree = NewickParser::parse_tree(tree_string.to_string()).unwrap();
+            println!("{}", tree.branchlengths_known);
             resolve(&mut tree, &SubCommands::Zero);
+            println!("{}", tree.branchlengths_known);
             println!("{}", tree.to_string());
             let mut bl = 0.0;
             for node in tree.nodes {
@@ -717,13 +725,14 @@ pub mod resolve {
 
         #[test]
         fn evenly() {
-            let tree_string = "((A:1,(B:1,C:1,D:1,a:1):1,E:1):1,F:1,G:1);";
-            let mut tree = MutableTree::from_fixed_node(NewickParser::parse_tree(tree_string).unwrap());
-            let startingHeight=tree.get_height(tree.root.unwrap());
+            let tree_string = "((A:1,(B:1,C:1,D:1,a:1):1,E:1):1,F:1,G:1);".to_string();
+            let mut tree =NewickParser::parse_tree(tree_string).unwrap();
+            tree.calc_node_heights();
+            let starting_height=tree.get_height(tree.root.unwrap());
             resolve(&mut tree, &SubCommands::Evenly);
             println!("{}", tree.to_string());
 
-            assert_eq!(startingHeight, tree.get_height(tree.root.unwrap()));
+            assert_eq!(starting_height, tree.get_height(tree.root.unwrap()));
         }
     }
 }

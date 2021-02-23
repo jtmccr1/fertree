@@ -207,7 +207,7 @@ impl MutableTree {
             .height
             .expect("how did it come to this. I thought heights were trust worthy")
     }
-
+    //TODO clean up bl/h knowledge;
     pub fn calc_node_heights(&mut self) {
         if !self.heights_known {
             self.heights_known = true;
@@ -566,9 +566,14 @@ impl MutableTree {
         node.label = Some(label);
     }
 
-    pub fn get_label(&self, index: TreeIndex) -> &Option<String> {
+    pub fn get_label(&self, index: TreeIndex) -> Option<&str> {
         let node = self.get_unwrapped_node(index);
-        &node.label
+        if let Some(label)= &node.label{
+            Some(label.as_str())
+        }else{
+            None
+        }
+
     }
     pub fn get_taxon_node(&self, taxon: &str) -> Option<usize> {
         if let Some(i) = self.taxon_node_map.get(taxon) {
