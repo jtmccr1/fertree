@@ -1,15 +1,15 @@
 // Needed by pest
-use crate::tree::fixed_tree::FixedNode;
 use crate::tree::AnnotationValue;
 use std::collections::HashMap;
 use crate::io::Error::IoError;
-use crate::tree::mutable_tree::{MutableTree, MutableTreeNode, TreeIndex};
+use crate::tree::mutable_tree::{MutableTree, TreeIndex};
 use std::str::Chars;
 
 pub struct NewickParser<'a> {
     last_token:Option<char>,
     tree:MutableTree,
-    reader:Chars<'a>
+    reader:Chars<'a>,
+    last_deliminator:char
 }
 
 type Result<T> = std::result::Result<T, IoError>;
@@ -19,7 +19,7 @@ This is model after the newick importer in BEAST
 TODO fill in the rest
  */
 impl  NewickParser<'_> {
-    fn parse_tree(str:&'static str)->Result<MutableTree>{
+    pub fn parse_tree(str:&'static str)->Result<MutableTree>{
         let start = std::time::Instant::now();
        let mut parser = NewickParser{
             last_token: None,
@@ -34,16 +34,17 @@ impl  NewickParser<'_> {
                 heights_known: false,
                 branchlengths_known: false
             },
-            reader: str.chars()
+            reader: str.chars(),
+           last_deliminator:'\0'
         };
 
 
         parser.skip_until('(')?;
         parser.unread_token('(');
 
-        let root = parser.read_internal_node();
+        let root = parser.read_internal_node()?;
         //TODO hide node/node ref api
-        parser.tree.set_root(Some(root.number));
+        parser.tree.set_root(Some(root));
 
         trace!(
             "Tree parsed in {} milli seconds ",
@@ -51,24 +52,60 @@ impl  NewickParser<'_> {
         );
         Ok(parser.tree)
     }
-    
-    fn read_internal_node(&mut self)->TreeIndex{
+
+    fn read_internal_node(&mut self)->Result<TreeIndex>{
         let token = self.read_token()?;
         //assert =='('
         let mut children = vec![];
-        children.push(self.read_branch());
+        children.push(self.read_branch()?);
 
-        unimplemented!()
+        // read subsequent children
+        while self.last_deliminator == ',' {
+            children.push(self.read_branch()?);
+        }
+
+        // should have had a closing ')'
+        if  self.last_deliminator != ')' {
+            // throw new BadFormatException("Missing closing ')' in tree");
+            Err(IoError)
+        }else{
+            //TODO read label here
+
+            Ok(self.tree.make_internal_node(children))
+        }
     }
-    fn read_external_node(&mut self)->TreeIndex{
-    unimplemented!()
+    fn read_external_node(&mut self)->Result<TreeIndex>{
+        let label= self.read_to_token(":();")?;
+
+        Ok(self.tree.make_external_node(label.as_str(),None).expect("Failed to make tip"))
     }
-    fn read_branch(&mut self)->TreeIndex{
-        unimplemented!()
+    fn read_branch(&mut self)->Result<TreeIndex>{
+
+        let mut length = 0.0;
+
+        let branch= if self.next_token()? == '(' {
+            // is an internal node
+             self.read_internal_node()?
+
+        } else {
+            // is an external node
+             self.read_external_node()?
+        };
+        //TODO branch comments?
+
+        if self.last_deliminator ==':' {
+            length = self.read_double(",():;")?;
+        }
+
+        self.tree.set_length(branch, length);
+
+        Ok(branch)
+
     }
     fn unread_token(&mut self,c:char){
         self.last_token = Some(c);
     }
+
     fn next_token(&mut self)->Result<char>{
         match self.last_token{
             None=>{
@@ -94,7 +131,92 @@ impl  NewickParser<'_> {
 
         Ok(ch)
     }
-    
+
+    fn read_to_token(&mut self,deliminator:&str)->Result<String>{
+        let mut space=0;
+        let mut ch= '\0';
+        let mut ch2='\0';
+        let mut quote_char='\0';
+
+        let mut done =false;
+        let mut first =true;
+        let mut quoted = false;
+
+        self.next_token()?;
+        let mut token = String::new();
+        while !done {
+            ch = self.read()?;
+            let is_space = ch.is_whitespace();
+            if quoted && ch==quote_char{
+                ch2=self.read()?;
+                if ch==ch2{
+                    token.push(ch);
+                }else{
+                    self.last_deliminator=' ';
+                    self.unread_token(ch2);
+                    done=true;
+                    quoted=false;
+                }
+            }else if first && (ch=='\'' || ch=='"'){
+                quoted=true;
+                quote_char=ch;
+                first=false;
+                space=0;
+            }else if ch=='['{
+                self.skip_comments(ch);
+                self.last_deliminator=' ';
+                done=true
+            }else{
+                if quoted{
+                    if is_space{
+                        space+=1;
+                        ch=' ';
+                    }else{
+                        space=0;
+                    }
+                    if space<2{
+                        token.push(ch);
+                    }
+                }else if is_space{
+                    self.last_deliminator=' ';
+                    done=true;
+                }else if deliminator.contains(ch){
+                    done=true;
+                    self.last_deliminator=ch;
+                }else{
+                    token.push(ch);
+                    first=false;
+                }
+            }
+        }
+
+        if self.last_deliminator.is_whitespace(){
+            ch = self.next_token()?;
+            while ch.is_whitespace(){
+                self.read();
+                ch=self.next_token()?;
+            }
+            if !deliminator.contains(ch){
+                self.last_deliminator=self.read_token()?;
+            }
+        }
+
+        Ok(token)
+
+
+
+    }
+
+    fn read_double(&mut self,deliminator:&str)->Result<f64>{
+        let s = self.read_to_token(deliminator)?;
+        //TODO capture this error
+
+        match s.parse(){
+            Ok(l)=>Ok(l),
+            Err(e)=>Err(IoError)
+        }
+    }
+
     fn next(&mut self)->Result<char>{
         match self.last_token{
             None=>{
@@ -142,6 +264,10 @@ impl  NewickParser<'_> {
                 ch = self.read_token()?;
             }
             Ok(ch)
+    }
+
+    fn get_last_deliminator(&self) ->char{
+        self.last_deliminator
     }
 
 }

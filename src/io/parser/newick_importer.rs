@@ -50,7 +50,7 @@ impl<'a> Iterator for NewickImporter<'a> {
                 Ok(nwk_string) => {
                     let tree = NewickParser::parse_tree(&*nwk_string);
                     match tree {
-                        Ok(node) => Some(Ok(MutableTree::from_fixed_node(node))),
+                        Ok(node) => Some(Ok(node)),
                         Err(e) => Some(Err(Box::new(e))),
                     }
                 }

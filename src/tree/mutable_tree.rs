@@ -151,7 +151,7 @@ impl MutableTree {
         if tree.get_num_children(node) == 0 {
             //make external node
             if let Some(taxon) = &tree.get_unwrapped_node(node).taxon {
-                new_node = self.make_external_node(taxon, &taxa);
+                new_node = self.make_external_node(taxon, Some(&taxa));
             }
         } else {
             let nchildren = tree.get_num_children(node);
@@ -270,8 +270,20 @@ impl MutableTree {
         self.branchlengths_known = false;
     }
 
-    fn make_external_node(&mut self, taxon: &str, taxa: &HashSet<String>) -> Option<TreeIndex> {
-        if taxa.contains(taxon) {
+    pub  fn make_external_node(&mut self, taxon: &str, taxa_set: Option<&HashSet<String>>) -> Option<TreeIndex> {
+        if let  Some(taxa) = taxa_set{
+            if taxa.contains(taxon) {
+                let index = self.nodes.len();
+                let new_node = MutableTreeNode::new(Some(taxon.to_string()), index);
+                self.nodes.push(new_node);
+                self.external_nodes.push(index);
+                self.taxon_node_map.insert(taxon.to_string(), index);
+
+                Some(index)
+            } else {
+                None
+            }
+        }else{
             let index = self.nodes.len();
             let new_node = MutableTreeNode::new(Some(taxon.to_string()), index);
             self.nodes.push(new_node);
@@ -279,9 +291,8 @@ impl MutableTree {
             self.taxon_node_map.insert(taxon.to_string(), index);
 
             Some(index)
-        } else {
-            None
         }
+
     }
     /// Make and return an internal node. Provided children will be added to the node in
     /// the order they appear in the input vector;

@@ -545,6 +545,7 @@ pub mod resolve {
         }
         Ok(())
     }
+
     // collect all poltyomies and child vectors in a stuct
     // set heights
     fn resolve(tree: &mut MutableTree, cmd: &SubCommands) {
@@ -688,6 +689,41 @@ pub mod resolve {
             if still_polytomy {
                 insert_nodes(tree, kido);
             }
+        }
+    }
+
+
+    #[cfg(test)]
+    mod tests {
+        use crate::commands::resolve::{resolve, SubCommands};
+        use rebl::tree::mutable_tree::MutableTree;
+        use rebl::io::parser::newick_parser::NewickParser;
+        // these just run at the momement. Need a way to compare the clades to ensure they are working
+        #[test]
+        fn zero() {
+            let tree_string = "((A:1,(B:1,C:1,D:1):1,E:1):1,F:1,G:1);";
+            let mut tree = MutableTree::from_fixed_node(NewickParser::parse_tree(tree_string).unwrap());
+            resolve(&mut tree, &SubCommands::Zero);
+            println!("{}", tree.to_string());
+            let mut bl = 0.0;
+            for node in tree.nodes {
+                if let Some(l) = node.length {
+                    bl += l;
+                }
+            }
+            assert_eq!(9.0, bl);
+        }
+
+
+        #[test]
+        fn evenly() {
+            let tree_string = "((A:1,(B:1,C:1,D:1,a:1):1,E:1):1,F:1,G:1);";
+            let mut tree = MutableTree::from_fixed_node(NewickParser::parse_tree(tree_string).unwrap());
+            let startingHeight=tree.get_height(tree.root.unwrap());
+            resolve(&mut tree, &SubCommands::Evenly);
+            println!("{}", tree.to_string());
+
+            assert_eq!(startingHeight, tree.get_height(tree.root.unwrap()));
         }
     }
 }
