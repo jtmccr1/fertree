@@ -3,7 +3,7 @@ use crate::tree::fixed_tree::FixedNode;
 use crate::tree::AnnotationValue;
 use std::collections::HashMap;
 use crate::io::Error::IoError;
-use crate::tree::mutable_tree::{MutableTree, MutableTreeNode};
+use crate::tree::mutable_tree::{MutableTree, MutableTreeNode, TreeIndex};
 use std::str::Chars;
 
 pub struct NewickParser<'a> {
@@ -18,8 +18,8 @@ type Result<T> = std::result::Result<T, IoError>;
 This is model after the newick importer in BEAST
 TODO fill in the rest
  */
-impl <'a> NewickParser {
-    fn parse_tree(str:& 'a str)->Result<MutableTree>{
+impl  NewickParser<'_> {
+    fn parse_tree(str:&'static str)->Result<MutableTree>{
         let start = std::time::Instant::now();
        let mut parser = NewickParser{
             last_token: None,
@@ -36,7 +36,9 @@ impl <'a> NewickParser {
             },
             reader: str.chars()
         };
-        parser.skip_until('(');
+
+
+        parser.skip_until('(')?;
         parser.unread_token('(');
 
         let root = parser.read_internal_node();
@@ -50,13 +52,18 @@ impl <'a> NewickParser {
         Ok(parser.tree)
     }
     
-    fn read_internal_node(&mut self)->&MutableTreeNode{
+    fn read_internal_node(&mut self)->TreeIndex{
+        let token = self.read_token()?;
+        //assert =='('
+        let mut children = vec![];
+        children.push(self.read_branch());
+
         unimplemented!()
     }
-    fn read_external_node(&mut self)->&MutableTreeNode{
+    fn read_external_node(&mut self)->TreeIndex{
     unimplemented!()
     }
-    fn read_branch(&mut self)->&MutableTreeNode{
+    fn read_branch(&mut self)->TreeIndex{
         unimplemented!()
     }
     fn unread_token(&mut self,c:char){
@@ -65,7 +72,7 @@ impl <'a> NewickParser {
     fn next_token(&mut self)->Result<char>{
         match self.last_token{
             None=>{
-                c = self.read_token()?;
+                let c = self.read_token()?;
                 self.last_token=Some(c);
                 Ok(c)
             },
@@ -77,21 +84,21 @@ impl <'a> NewickParser {
     }
     fn read_token(&mut self)->Result<char>{
         self.skip_space();
-        ch = self.read();
+        let mut ch = self.read()?;
         // while hasComments && (ch == startComment || ch == lineComment) {
-        while hasComments && (ch == '[') {
+        while ch == '[' {
             self.skip_comments(ch);
             self.skip_space();
-            ch = self.read();
+            ch = self.read()?;
         }
 
-        ch
+        Ok(ch)
     }
     
     fn next(&mut self)->Result<char>{
         match self.last_token{
             None=>{
-                c = self.read()?;
+                let c = self.read()?;
                 self.last_token=Some(c);
                 Ok(c)
             },
@@ -116,15 +123,25 @@ impl <'a> NewickParser {
         }
     }
 
-    fn skip_space(&mut self){
-        unimplemented!()
+    fn skip_space(&mut self)->Result<()>{
+        let mut ch:char = self.read_token()?;
+        while ch.is_whitespace(){
+            ch = self.read_token()?;
+        }
+        self.unread_token(ch);
+        Ok(())
     }
-    fn skip_comments(&mut self,c:char){
+    fn skip_comments(&mut self,c:char)->Result<()>{
         unimplemented!()
+        //TODO set up hashmap of annotations
     }
 
-    fn skip_until(&mut self,c:char){
-        unimplemented!()
+    fn skip_until(&mut self,c:char)->Result<char>{
+            let mut ch:char = self.read_token()?;
+            while ch!=c{
+                ch = self.read_token()?;
+            }
+            Ok(ch)
     }
 
 }
