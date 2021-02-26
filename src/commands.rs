@@ -390,7 +390,8 @@ pub mod split {
             warn!("Because explore is set. No trees will be written");
         }
         for parsed_tree in trees {
-            let starting_tree = parsed_tree?;
+            let mut starting_tree = parsed_tree?;
+            starting_tree.calc_node_heights();
             trace!("starting to split");
             let mut searcher = SubtreeSearcher {
                 tree: starting_tree,
@@ -439,7 +440,8 @@ pub mod split {
                 }
                 if !explore {
                     for subtree in searcher.subtrees {
-                        let st = MutableTree::copy_subtree(&searcher.tree, subtree.root, taxa);
+                        let mut st = MutableTree::copy_subtree(&searcher.tree, subtree.root, taxa);
+                        st.calculate_branchlengths();
                         writeln!(handle, "{}", st)?;
                     }
                 }
@@ -556,12 +558,11 @@ pub mod resolve {
             }
             _ => {}
         }
-        let mut polytomies = tree
-            .internal_nodes
-            .iter()
-            .map(|n| (n, tree.get_children(*n)))
+        let mut polytomies = tree.preorder_iter()
+            .filter(|node| !tree.is_external(*node))
+            .map(|n| (n, tree.get_children(n)))
             .filter(|(_n, kids)| kids.len() > 2)
-            .map(|(root, tips)| Polytomy { root: *root, tips })
+            .map(|(root, tips)| Polytomy { root: root, tips })
             .collect::<Vec<Polytomy>>();
         let node_count = tree.get_node_count();
         info!("{} polytomies found", polytomies.len());
@@ -631,8 +632,10 @@ pub mod resolve {
                             .get_height(*tip)
                             .expect("lowerbound node should have a height")
                             + tree.get_length(*tip).unwrap() * 0.5;
+
                         let diff = (upper_bound - lower_bound) / ((path_to_proot.len() + 1) as f64);
                         let mut height = lower_bound + diff;
+
                         for node in path_to_proot.iter() {
                             tree.set_height(*node, height);
                             height += diff;
@@ -733,6 +736,11 @@ pub mod resolve {
             println!("{}", tree.to_string());
 
             assert_eq!(starting_height, tree.get_height(tree.root.unwrap()));
+        }
+
+        fn polytomy(){
+            let tree_string = "((A:1,(B:1,C:1,D:1,a:1):1,E:1):1,F:1,G:1);".to_string();
+            let mut tree =NewickParser::parse_tree(tree_string).unwrap();
         }
     }
 }

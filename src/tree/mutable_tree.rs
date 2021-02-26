@@ -138,7 +138,6 @@ impl MutableTree {
         };
         me.tree_helper(tree, node, taxa);
         me.heights_known = true;
-        me.calculate_branchlengths();
         me
     }
     fn tree_helper(
