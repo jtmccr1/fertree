@@ -7,6 +7,7 @@ use std::option::Option;
 pub type TreeIndex = usize;
 
 //TODO think more about missing data. Should these be options? Should they be guaranteed
+//TODO adopt nodeorder
 #[derive(Debug)]
 pub struct MutableTreeNode {
     pub taxon: Option<String>,

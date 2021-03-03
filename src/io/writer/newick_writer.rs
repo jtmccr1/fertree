@@ -109,13 +109,13 @@ mod tests {
     #[test]
     fn tree_with_annotations() {
         let s = "((A[&location=UK]:0.3,B[&location=USA]:0.05):0.9,C[&location=US]:0.1);";
-        let tree = NewickParser::parse_tree(s.to_string()).expect("error in parsing");
+        let tree = NewickParser::parse_string(s.to_string()).expect("error in parsing");
         assert_eq!(s, tree.to_string())
     }
     #[test]
     fn tree_with_label() {
         let s = "((A[&location=UK]:0.3,B[&location=USA]:0.05)label:0.9,C[&location=US]:0.1);";
-        let tree = NewickParser::parse_tree(s.to_string()).expect("error in parsing");
+        let tree = NewickParser::parse_string(s.to_string()).expect("error in parsing");
         println!("{:?}", tree.get_internal_node(1));
         assert_eq!(s, tree.to_string())
     }
@@ -123,7 +123,7 @@ mod tests {
     #[test]
     fn tree_with_quotes() {
         let s = "((A[&location=UK]:0.3,B[&location=USA]:0.05):0.9,'C d'[&location=US]:0.1);";
-        let tree = NewickParser::parse_tree(s.to_string()).expect("error in parsing");
+        let tree = NewickParser::parse_string(s.to_string()).expect("error in parsing");
         println!("{}",tree);
         assert_eq!(s, tree.to_string())
     }

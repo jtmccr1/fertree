@@ -4,100 +4,8 @@ use std::collections::HashMap;
 use crate::tree::mutable_tree::{MutableTree, TreeIndex};
 use std::str::Chars;
 use crate::io::error::IoError;
-use pest_consume::{match_nodes, Error, Parser};
 
 
-type PestResult<T> = std::result::Result<T, Error<Rule>>;
-type Node<'i> = pest_consume::Node<'i, Rule, ()>;
-
-#[derive(Parser)]
-#[grammar = "./io/parser/tree_annotation.pest"]
-pub struct AnnotationParser;
-
-
-
-#[pest_consume::parser]
-impl AnnotationParser {
-    fn annotation(input: Node) -> PestResult<(String, AnnotationValue)> {
-        Ok(match_nodes!(input.into_children();
-            [key(k),value(v)]=>(k,v),
-        ))
-    }
-    fn annotation_set(input: Node) -> PestResult<Vec<(String, AnnotationValue)>> {
-        let mut annotations = vec![];
-        Ok(match_nodes!(input.into_children();
-            [annotation(a)]=>{
-                annotations.push(a);
-                annotations
-            },
-            [annotation(a),annotation_set(others)]=>{
-                annotations.push(a);
-                for other in others{
-                    annotations.push(other);
-            }
-            annotations
-        }
-        ))
-    }
-
-    fn node_annotation(input: Node) -> PestResult<HashMap<String, AnnotationValue>> {
-        Ok(match_nodes!(input.into_children();
-            [annotation_set(annotations)]=>{
-                let mut annotation_map = HashMap::new();
-                for (key,value) in annotations{
-                    annotation_map.insert(key,value);
-                }
-                annotation_map
-            }
-        ))
-    }
-
-    fn key(input: Node) -> PestResult<String> {
-        let name = input.as_str();
-        Ok(name.to_string())
-    }
-
-    fn value(input: Node) -> PestResult<AnnotationValue> {
-        Ok(match_nodes!(input.into_children();
-            [continuous(n)]=>n,
-            [discrete(n)]=>n,
-            [set(n)]=>n
-        ))
-    }
-    fn one_entry(input: Node) -> PestResult<AnnotationValue> {
-        Ok(match_nodes!(input.into_children();
-            [continuous(n)]=>n,
-            [discrete(n)]=>n
-        ))
-    }
-    fn continuous(input: Node) -> PestResult<AnnotationValue> {
-        let x = input
-            .as_str()
-            .parse::<f64>()
-            // `input.error` links the error to the location in the input file where it occurred.
-            .map_err(|e| input.error(e));
-
-        Ok(AnnotationValue::Continuous(x.unwrap()))
-    }
-    fn discrete(input: Node) -> PestResult<AnnotationValue> {
-        let name = input.as_str().to_string();
-        Ok(AnnotationValue::Discrete(name))
-    }
-    fn set(input: Node) -> PestResult<AnnotationValue> {
-        let set = match_nodes!(input.into_children();
-            [one_entry(n)..]=>n.collect(),
-        );
-        Ok(AnnotationValue::Set(set))
-    }
-}
-impl AnnotationParser{
-    fn parse_annotation(s:&str) ->PestResult<HashMap<String,AnnotationValue>>{
-        let inputs = AnnotationParser::parse(Rule::node_annotation, s)?;
-        // There should be a single root node in the parsed tree
-        let input = inputs.single()?;
-        AnnotationParser::node_annotation(input)
-    }
-}
 #[derive(Debug)]
 pub struct NewickParser<'a> {
     last_token:Option<char>,
@@ -114,7 +22,7 @@ This is model after the newick importer in BEAST
 TODO fill in the rest
  */
 impl  NewickParser<'_> {
-    pub fn parse_tree(input_string:String)->Result<MutableTree>{
+    pub fn parse_string(input_string:String) ->Result<MutableTree>{
         let start = std::time::Instant::now();
        let mut parser = NewickParser{
             last_token: None,
@@ -388,7 +296,7 @@ mod tests {
 
     #[test]
     fn general_parse() {
-        let tree = NewickParser::parse_tree("(a:1,b:4)l;".to_string()).unwrap();
+        let tree = NewickParser::parse_string("(a:1,b:4)l;".to_string()).unwrap();
         let root = tree.get_root().unwrap();
         let label = tree.get_label(root).unwrap();
         assert_eq!( label,"l");
@@ -414,7 +322,7 @@ mod tests {
 
     #[test]
     fn scientific() {
-        let tree = NewickParser::parse_tree("(a:1E1,b:2e-5)l;".to_string()).unwrap();
+        let tree = NewickParser::parse_string("(a:1E1,b:2e-5)l;".to_string()).unwrap();
         let root = tree.get_root().unwrap();
         let mut bl = vec![];
         if let Some(l) = tree.get_length(root) {
@@ -430,28 +338,28 @@ mod tests {
 
     #[test]
     fn quoted() {
-       assert!(true, NewickParser::parse_tree("('234] ':1,'here a *':1);".to_string()).is_ok());
+       assert!(true, NewickParser::parse_string("('234] ':1,'here a *':1);".to_string()).is_ok());
     }
 
     #[test]
     fn comment() {
-        assert!(NewickParser::parse_tree("(a[&test=ok],b:1);".to_string()).is_ok());
+        assert!(NewickParser::parse_string("(a[&test=ok],b:1);".to_string()).is_ok());
     }
 
     #[test]
     fn whitespace() {
-        assert!(NewickParser::parse_tree("  (a,b:1);\t".to_string()).is_ok());
+        assert!(NewickParser::parse_string("  (a,b:1);\t".to_string()).is_ok());
     }
 
     #[test]
     fn should_error() {
-        let out = NewickParser::parse_tree("('234] ','here a *')".to_string());
+        let out = NewickParser::parse_string("('234] ','here a *')".to_string());
         assert_eq!(true, out.is_err())
     }
 
     #[test]
     fn should_error_again() {
-        let out = NewickParser::parse_tree("(a,b));".to_string());
+        let out = NewickParser::parse_string("(a,b));".to_string());
         assert_eq!(true, out.is_err())
     }
 }
