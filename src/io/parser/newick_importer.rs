@@ -47,7 +47,7 @@ impl<'a> Iterator for NewickImporter<'a> {
         if let Some(line) = self.lines().next() {
             match line {
                 Ok(nwk_string) => {
-                    let tree = NewickParser::parse_string(nwk_string);
+                    let tree = NewickParser::parse_string(nwk_string.as_bytes());
                     match tree {
                         Ok(node) => Some(Ok(node)),
                         Err(e) => Some(Err(e)),

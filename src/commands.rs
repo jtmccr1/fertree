@@ -711,7 +711,7 @@ pub mod resolve {
         #[test]
         fn zero() {
             let tree_string = "((A:1,(B:1,C:1,D:1):1,E:1):1,F:1,G:1);";
-            let mut tree = NewickParser::parse_string(tree_string.to_string()).unwrap();
+            let mut tree = NewickParser::parse_string(tree_string.as_bytes()).unwrap();
             println!("{}", tree.branchlengths_known);
             resolve(&mut tree, &SubCommands::Zero);
             println!("{}", tree.branchlengths_known);
@@ -728,7 +728,7 @@ pub mod resolve {
 
         #[test]
         fn evenly() {
-            let tree_string = "((A:1,(B:1,C:1,D:1,a:1):1,E:1):1,F:1,G:1);".to_string();
+            let tree_string = "((A:1,(B:1,C:1,D:1,a:1):1,E:1):1,F:1,G:1);".as_bytes();
             let mut tree =NewickParser::parse_string(tree_string).unwrap();
             tree.calc_node_heights();
             let starting_height=tree.get_height(tree.root.unwrap());
@@ -739,7 +739,7 @@ pub mod resolve {
         }
 
         fn polytomy(){
-            let tree_string = "((A:1,(B:1,C:1,D:1,a:1):1,E:1):1,F:1,G:1);".to_string();
+            let tree_string = "((A:1,(B:1,C:1,D:1,a:1):1,E:1):1,F:1,G:1);".as_bytes();
             let mut tree =NewickParser::parse_string(tree_string).unwrap();
         }
     }

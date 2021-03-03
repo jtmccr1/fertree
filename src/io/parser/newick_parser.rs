@@ -4,65 +4,61 @@ use std::collections::HashMap;
 use crate::tree::mutable_tree::{MutableTree, TreeIndex};
 use std::str::Chars;
 use crate::io::error::IoError;
+use crate::io::parser::annotation_parser::AnnotationParser;
+use std::io::{BufReader, Read};
 
 
 #[derive(Debug)]
-pub struct NewickParser<'a> {
-    last_token:Option<char>,
-    tree:MutableTree,
-    reader:Chars<'a>,
-    last_deliminator:char,
+pub struct NewickParser<R> {
+    last_token:Option<u8>,
+    tree:Option<MutableTree>,
+    reader:BufReader<R>,
+    last_deliminator:u8,
     last_annotation:Option<HashMap<String,AnnotationValue>>
 }
 
 type Result<T> = std::result::Result<T, IoError>;
-
+type Byte =u8;
 /*
 This is model after the newick importer in BEAST
 TODO fill in the rest
  */
-impl  NewickParser<'_> {
-    pub fn parse_string(input_string:String) ->Result<MutableTree>{
-        let start = std::time::Instant::now();
+impl<R : std::io::Read>  NewickParser<R> {
+    pub fn parse_string(input_reader:R) ->Result<MutableTree>{
        let mut parser = NewickParser{
             last_token: None,
             //TODO better cleaner api through new.
-            tree: MutableTree {
-                nodes: vec![],
-                external_nodes: vec![],
-                internal_nodes: vec![],
-                annotation_type: Default::default(),
-                taxon_node_map: Default::default(),
-                root: None,
-                heights_known: false,
-                branchlengths_known: false
-            },
-            reader: input_string.chars(),
+            tree: None,
+            reader: BufReader::new(input_reader),
            last_annotation:None,
-           last_deliminator:'\0'
+           last_deliminator:b'\0'
         };
 
-        parser.skip_until('(')?;
-        parser.unread_token('(');
+        parser.read_next_tree()
+    }
+    fn read_next_tree(&mut self)->Result<MutableTree>{
+        let start = std::time::Instant::now();
+        self.tree=Some(MutableTree::new());
+        self.skip_until(b'(')?;
+        self.unread_token(b'(');
 
-        let root = parser.read_internal_node()?;
+        let root = self.read_internal_node()?;
         //TODO hide node/node ref api
-        parser.tree.set_root(Some(root));
-        parser.tree.branchlengths_known=true;
+        self.get_tree().set_root(Some(root));
+        self.get_tree().branchlengths_known=true;
 
-        match parser.last_deliminator{
-            ')'=>Err(IoError),
-            ';'=>{
+        match self.last_deliminator{
+            b')'=>Err(IoError),
+            b';'=>{
                 trace!(
                     "Tree parsed in {} milli seconds ",
                     start.elapsed().as_millis()
                 );
-                Ok(parser.tree)
+                Ok(self.tree.take().unwrap())
             },
             _=>Err(IoError)
         }
     }
-
     fn read_internal_node(&mut self)->Result<TreeIndex>{
         let token = self.read_token()?;
         //assert =='('
@@ -70,19 +66,19 @@ impl  NewickParser<'_> {
         children.push(self.read_branch()?);
 
         // read subsequent children
-        while self.last_deliminator == ',' {
+        while self.last_deliminator == b',' {
             children.push(self.read_branch()?);
         }
 
         // should have had a closing ')'
-        if  self.last_deliminator != ')' {
+        if  self.last_deliminator != b')' {
             // throw new BadFormatException("Missing closing ')' in tree");
             Err(IoError)
         }else{
             let label= self.read_to_token(",:();")?;
-            let node = self.tree.make_internal_node(children);
+            let node = self.get_tree().make_internal_node(children);
             if !label.is_empty(){
-                self.tree.label_node(node, label);
+                self.get_tree().label_node(node, label);
             }
             self.annotation_node(node);
             //TODO root branch length?
@@ -91,7 +87,7 @@ impl  NewickParser<'_> {
     }
     fn read_external_node(&mut self)->Result<TreeIndex>{
         let label= self.read_to_token(",:();")?;
-        let node = self.tree.make_external_node(label.as_str(),None).expect("Failed to make tip");
+        let node = self.get_tree().make_external_node(label.as_str(),None).expect("Failed to make tip");
         self.annotation_node(node);
 
         Ok(node)
@@ -99,7 +95,7 @@ impl  NewickParser<'_> {
     fn read_branch(&mut self)->Result<TreeIndex>{
         let mut length = 0.0;
 
-        let branch= if self.next_token()? == '(' {
+        let branch= if self.next_token()? == b'(' {
             // is an internal node
              self.read_internal_node()?
 
@@ -109,21 +105,21 @@ impl  NewickParser<'_> {
         };
         //TODO branch comments?
 
-        if self.last_deliminator ==':' {
+        if self.last_deliminator ==b':' {
             length = self.read_double(",():;")?;
             self.annotation_node(branch);
         }
 
-        self.tree.set_length(branch, length);
+        self.get_tree().set_length(branch, length);
 
         Ok(branch)
 
     }
-    fn unread_token(&mut self,c:char){
+    fn unread_token(&mut self,c:Byte){
         self.last_token = Some(c);
     }
 
-    fn next_token(&mut self)->Result<char>{
+    fn next_token(&mut self)->Result<Byte>{
         match self.last_token{
             None=>{
                 let c = self.read_token()?;
@@ -136,11 +132,11 @@ impl  NewickParser<'_> {
         }
 
     }
-    fn read_token(&mut self)->Result<char>{
+    fn read_token(&mut self)->Result<Byte>{
         self.skip_space()?;
         let mut ch = self.read()?;
         // while hasComments && (ch == startComment || ch == lineComment) {
-        while ch == '[' {
+        while ch == b'[' {
             self.skip_comments(ch)?;
             self.skip_space()?;
             ch = self.read()?;
@@ -150,10 +146,11 @@ impl  NewickParser<'_> {
     }
 
     fn read_to_token(&mut self,deliminator:&str)->Result<String>{
+        let delims = deliminator.bytes().collect::<Vec<Byte>>();
         let mut space=0;
-        let mut ch= '\0';
-        let mut ch2='\0';
-        let mut quote_char='\0';
+        let mut ch= b'\0';
+        let mut ch2=b'\0';
+        let mut quote_char=b'\0';
 
         let mut done =false;
         let mut first =true;
@@ -163,23 +160,23 @@ impl  NewickParser<'_> {
         let mut token = String::new();
         while !done {
             ch = self.read()?;
-            let is_space = ch.is_whitespace();
+            let is_space = char::from(ch).is_whitespace();
             if quoted && ch==quote_char{
                 ch2=self.read()?;
                 if ch==ch2{
-                    token.push(ch);
+                    token.push(char::from(ch));
                 }else{
                     // self.last_deliminator=' ';
                     self.unread_token(ch2);
                     // done=true;
                     quoted=false;
                 }
-            }else if first && (ch=='\'' || ch=='"'){
+            }else if first && (ch==b'\'' || ch==b'"'){
                 quoted=true;
                 quote_char=ch;
                 first=false;
                 space=0;
-            }else if ch=='['{
+            }else if ch==b'['{
                 self.skip_comments(ch)?;
                 // self.last_deliminator=' ';
                 done=true
@@ -187,32 +184,32 @@ impl  NewickParser<'_> {
                 if quoted{
                     if is_space{
                         space+=1;
-                        ch=' ';
+                        ch=b' ';
                     }else{
                         space=0;
                     }
                     if space<2{
-                        token.push(ch);
+                        token.push(char::from(ch));
                     }
                 }else if is_space{
-                    self.last_deliminator=' ';
+                    self.last_deliminator=b' ';
                     done=true;
-                }else if deliminator.contains(ch){
+                }else if delims.contains(&ch){
                     done=true;
                     self.last_deliminator=ch;
                 }else{
-                    token.push(ch);
+                    token.push(char::from(ch));
                     first=false;
                 }
             }
         }
-        if self.last_deliminator.is_whitespace(){
+        if char::from(self.last_deliminator).is_whitespace(){
             ch = self.next_token()?;
-            while ch.is_whitespace(){
+            while char::from(ch).is_whitespace(){
                 self.read()?;
                 ch=self.next_token()?;
             }
-            if !deliminator.contains(ch){
+            if !delims.contains(&ch){
                 self.last_deliminator=self.read_token()?;
             }
         }
@@ -231,11 +228,13 @@ impl  NewickParser<'_> {
         }
     }
 
-    fn read(& mut self)->Result<char>{
+    fn read(& mut self)->Result<Byte>{
+        let mut buf:[u8;1]= [0;1];
         match self.last_token{
             None=>{
-               if let Some(c) = self.reader.next(){
-                   Ok(c)
+
+               if let Ok(1) = self.reader.read(&mut buf) {
+                   Ok(buf[0])
                }else{
                    Err(IoError)
                }
@@ -248,17 +247,17 @@ impl  NewickParser<'_> {
     }
 
     fn skip_space(&mut self)->Result<()>{
-        let mut ch:char = self.read()?;
-        while ch.is_whitespace(){
+        let mut ch:Byte = self.read()?;
+        while char::from(ch).is_whitespace(){
             ch = self.read()?;
         }
         self.unread_token(ch);
         Ok(())
     }
-    fn skip_comments(&mut self,c:char)->Result<()>{
-        let mut comment = String::from(c);
+    fn skip_comments(&mut self,c:Byte)->Result<()>{
+        let mut comment = String::from(char::from(c));
         comment.push_str(self.read_to_token("(),:;")?.as_str());
-        while self.last_deliminator==' '{
+        while self.last_deliminator==b' '{
             comment.push_str(self.read_to_token("(),:;")?.as_str());
         };
         if let Ok(annotation) = AnnotationParser::parse_annotation(comment.as_str()){
@@ -270,8 +269,8 @@ impl  NewickParser<'_> {
 
     }
 
-    fn skip_until(&mut self,c:char)->Result<char>{
-            let mut ch:char = self.read_token()?;
+    fn skip_until(&mut self,c:Byte)->Result<Byte>{
+            let mut ch:Byte = self.read_token()?;
             while ch!=c{
                 ch = self.read_token()?;
             }
@@ -282,9 +281,13 @@ impl  NewickParser<'_> {
         if self.last_annotation.is_some(){
             let annotation_map = self.last_annotation.take().unwrap();
             for (key, value) in annotation_map.into_iter() {
-                self.tree.annotate_node(nodeRef, key, value);
+                self.get_tree().annotate_node(nodeRef, key, value);
             }
         }
+    }
+
+    fn get_tree(&mut self)->&mut MutableTree{
+        self.tree.as_mut().unwrap()
     }
 
 }
@@ -296,7 +299,7 @@ mod tests {
 
     #[test]
     fn general_parse() {
-        let tree = NewickParser::parse_string("(a:1,b:4)l;".to_string()).unwrap();
+        let tree = NewickParser::parse_string("(a:1,b:4)l;".as_bytes()).unwrap();
         let root = tree.get_root().unwrap();
         let label = tree.get_label(root).unwrap();
         assert_eq!( label,"l");
@@ -322,7 +325,7 @@ mod tests {
 
     #[test]
     fn scientific() {
-        let tree = NewickParser::parse_string("(a:1E1,b:2e-5)l;".to_string()).unwrap();
+        let tree = NewickParser::parse_string("(a:1E1,b:2e-5)l;".as_bytes()).unwrap();
         let root = tree.get_root().unwrap();
         let mut bl = vec![];
         if let Some(l) = tree.get_length(root) {
@@ -338,28 +341,28 @@ mod tests {
 
     #[test]
     fn quoted() {
-       assert!(true, NewickParser::parse_string("('234] ':1,'here a *':1);".to_string()).is_ok());
+       assert!(true, NewickParser::parse_string("('234] ':1,'here a *':1);".as_bytes()).is_ok());
     }
 
     #[test]
     fn comment() {
-        assert!(NewickParser::parse_string("(a[&test=ok],b:1);".to_string()).is_ok());
+        assert!(NewickParser::parse_string("(a[&test=ok],b:1);".as_bytes()).is_ok());
     }
 
     #[test]
     fn whitespace() {
-        assert!(NewickParser::parse_string("  (a,b:1);\t".to_string()).is_ok());
+        assert!(NewickParser::parse_string("  (a,b:1);\t".as_bytes()).is_ok());
     }
 
     #[test]
     fn should_error() {
-        let out = NewickParser::parse_string("('234] ','here a *')".to_string());
+        let out = NewickParser::parse_string("('234] ','here a *')".as_bytes());
         assert_eq!(true, out.is_err())
     }
 
     #[test]
     fn should_error_again() {
-        let out = NewickParser::parse_string("(a,b));".to_string());
+        let out = NewickParser::parse_string("(a,b));".as_bytes());
         assert_eq!(true, out.is_err())
     }
 }

@@ -52,6 +52,18 @@ pub struct MutableTree {
 }
 
 impl MutableTree {
+    pub fn new()->Self{
+        MutableTree {
+            nodes: vec![],
+            external_nodes: vec![],
+            internal_nodes: vec![],
+            annotation_type: Default::default(),
+            taxon_node_map: Default::default(),
+            root: None,
+            heights_known: false,
+            branchlengths_known: false
+        }
+    }
     pub fn from_fixed_node(root: FixedNode) -> Self {
         let mut tree = MutableTree {
             nodes: Vec::new(),

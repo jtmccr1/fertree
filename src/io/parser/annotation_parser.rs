@@ -84,7 +84,7 @@ impl AnnotationParser {
     }
 }
 impl AnnotationParser{
-    fn parse_annotation(s:&str) ->PestResult<HashMap<String,AnnotationValue>>{
+    pub(crate) fn parse_annotation(s:&str) ->PestResult<HashMap<String,AnnotationValue>>{
         let inputs = AnnotationParser::parse(Rule::node_annotation, s)?;
         // There should be a single root node in the parsed tree
         let input = inputs.single()?;
