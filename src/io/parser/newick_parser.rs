@@ -48,7 +48,7 @@ impl<R : std::io::Read>  NewickParser<R> {
         self.get_tree().branchlengths_known=true;
 
         match self.last_deliminator{
-            b')'=>Err(IoError),
+            b')'=>Err(IoError::OTHER),
             b';'=>{
                 trace!(
                     "Tree parsed in {} milli seconds ",
@@ -56,7 +56,7 @@ impl<R : std::io::Read>  NewickParser<R> {
                 );
                 Ok(self.tree.take().unwrap())
             },
-            _=>Err(IoError)
+            _=>Err(IoError::OTHER)
         }
     }
     fn read_internal_node(&mut self)->Result<TreeIndex>{
@@ -73,7 +73,7 @@ impl<R : std::io::Read>  NewickParser<R> {
         // should have had a closing ')'
         if  self.last_deliminator != b')' {
             // throw new BadFormatException("Missing closing ')' in tree");
-            Err(IoError)
+            Err(IoError::OTHER)
         }else{
             let label= self.read_to_token(",:();")?;
             let node = self.get_tree().make_internal_node(children);
@@ -224,7 +224,7 @@ impl<R : std::io::Read>  NewickParser<R> {
 
         match s.parse(){
             Ok(l)=>Ok(l),
-            Err(e)=>Err(IoError)
+            Err(e)=>Err(IoError::OTHER)
         }
     }
 
@@ -236,7 +236,7 @@ impl<R : std::io::Read>  NewickParser<R> {
                if let Ok(1) = self.reader.read(&mut buf) {
                    Ok(buf[0])
                }else{
-                   Err(IoError)
+                   Err(IoError::OTHER)
                }
             },
             Some(c)=>{
@@ -264,7 +264,7 @@ impl<R : std::io::Read>  NewickParser<R> {
             self.last_annotation = Some(annotation);
             Ok(())
         }else{
-            Err(IoError)
+            Err(IoError::OTHER)
         }
 
     }

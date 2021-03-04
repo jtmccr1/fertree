@@ -5,13 +5,18 @@ use commands::{annotate, collapse, extract, resolve, stats};
 use rebl::io::parser::newick_importer;
 use std::{io, path};
 use structopt::StructOpt;
+use std::fs::File;
+use rebl::io::parser::newick_importer::NewickImporter;
+use std::io::Read;
+use std::error::Error;
+
 #[macro_use]
 extern crate log;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
-    about = "command line tools for processing phylogenetic trees in rust",
-    rename_all = "kebab-case"
+about = "command line tools for processing phylogenetic trees in rust",
+rename_all = "kebab-case"
 )]
 struct Cli {
     #[structopt(flatten)]
@@ -35,10 +40,10 @@ enum Fertree {
     /// Annotate the tips of a tree from a tsv file.
     Annotate {
         #[structopt(
-            short,
-            long,
-            parse(from_os_str),
-            help = "trait tsv with taxa labels as first field"
+        short,
+        long,
+        parse(from_os_str),
+        help = "trait tsv with taxa labels as first field"
         )]
         traits: path::PathBuf,
     },
@@ -50,9 +55,9 @@ enum Fertree {
     /// Collapse (i.e. subsample) monophyletic clades into a set number of tips
     Collapse {
         #[structopt(
-            short,
-            long,
-            help = "annotation key we are collapsing by. must be discrete"
+        short,
+        long,
+        help = "annotation key we are collapsing by. must be discrete"
         )]
         annotation: String,
         #[structopt(short, long, help = "annotation value we are collapsing by")]
@@ -67,22 +72,22 @@ enum Fertree {
     /// outputs the number of tips in each tree.
     Split {
         #[structopt(
-            short,
-            long,
-            help = "Don't split tree but print the number of trees at different cut-offs"
+        short,
+        long,
+        help = "Don't split tree but print the number of trees at different cut-offs"
         )]
         explore: bool,
         #[structopt(
-            short,
-            long,
-            help = "relax the minimum clade size so that the root subtree is a separate subtree."
+        short,
+        long,
+        help = "relax the minimum clade size so that the root subtree is a separate subtree."
         )]
         relaxed: bool,
         #[structopt(
-            short,
-            long,
-            help = "the minimum clade size",
-            required_if("explore", "true")
+        short,
+        long,
+        help = "the minimum clade size",
+        required_if("explore", "true")
         )]
         min_size: Option<usize>,
     },
@@ -96,11 +101,11 @@ enum Fertree {
 #[derive(Debug, StructOpt)]
 pub struct Common {
     #[structopt(
-        short,
-        long,
-        parse(from_os_str),
-        help = "input tree file",
-        global = true
+    short,
+    long,
+    parse(from_os_str),
+    help = "input tree file",
+    global = true
     )]
     infile: Option<path::PathBuf>,
     // #[structopt(short, long, parse(from_os_str), help = "output tree file", global = true)]
@@ -118,12 +123,32 @@ fn main() {
     debug!("{:?}", args);
     let start = std::time::Instant::now();
     let stdin = io::stdin();
-    let tree_importer = match args.common.infile {
-        Some(path) => newick_importer::NewickImporter::from_path(path).expect("Error reading file"),
-        None => newick_importer::NewickImporter::from_console(&stdin),
+    let result = match args.common.infile {
+
+        Some(path) => {
+            let ni = newick_importer::NewickImporter::from_reader(File::open(path).expect(&*format!("issue with path ")));
+            run_commands(ni,args.cmd)
+        },
+        None => {
+            let ni=newick_importer::NewickImporter::from_reader(stdin.lock());
+            run_commands(ni,args.cmd)
+        },
     };
 
-    let result = match args.cmd {
+    info!("{} seconds elapsed", start.elapsed().as_secs());
+    match result {
+        Ok(_) => {
+            std::process::exit(exitcode::OK);
+        }
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(exitcode::IOERR);
+        }
+    }
+}
+
+fn run_commands<R:std::io::Read>(tree_importer:NewickImporter<R>,cmd:Fertree)->Result<(),Box<dyn Error>> {
+    match cmd {
         Fertree::Stats { cmd } => stats::run(tree_importer, cmd),
         Fertree::Annotate { traits } => annotate::run(tree_importer, traits),
         Fertree::Extract { cmd } => extract::run(tree_importer, cmd),
@@ -141,16 +166,6 @@ fn main() {
         _ => {
             warn!("not implemented");
             Ok(())
-        }
-    };
-    info!("{} seconds elapsed", start.elapsed().as_secs());
-    match result {
-        Ok(_) => {
-            std::process::exit(exitcode::OK);
-        }
-        Err(e) => {
-            eprintln!("Error: {}", e);
-            std::process::exit(exitcode::IOERR);
         }
     }
 }
