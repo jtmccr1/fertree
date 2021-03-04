@@ -50,6 +50,8 @@ pub struct MutableTree {
     pub root: Option<TreeIndex>,
     pub heights_known: bool,
     pub branchlengths_known: bool,
+    pub id:Option<String>,
+    pub tree_annotation:HashMap<String, AnnotationValue>
 }
 
 impl MutableTree {
@@ -62,25 +64,18 @@ impl MutableTree {
             taxon_node_map: Default::default(),
             root: None,
             heights_known: false,
-            branchlengths_known: false
+            branchlengths_known: false,
+            id:None,
+            tree_annotation:HashMap::new(),
         }
     }
     pub fn from_fixed_node(root: FixedNode) -> Self {
-        let mut tree = MutableTree {
-            nodes: Vec::new(),
-            external_nodes: Vec::new(),
-            internal_nodes: Vec::new(),
-            annotation_type: HashMap::new(),
-            taxon_node_map: HashMap::new(),
-            root: None,
-            heights_known: false,
-            branchlengths_known: true,
-        };
+        let mut tree = MutableTree::new();
+        tree.branchlengths_known=true;
         tree.fixed_node_helper(root, None);
         tree.set_root(Some(0));
         tree.calc_node_heights();
         tree.branchlengths_known = true;
-
         tree
     }
 
@@ -120,16 +115,7 @@ impl MutableTree {
     }
 
     pub fn from_tree(tree: &MutableTree, taxa: &HashSet<String>) -> Self {
-        let mut me = MutableTree {
-            nodes: Vec::new(),
-            external_nodes: Vec::new(),
-            internal_nodes: Vec::new(),
-            annotation_type: HashMap::new(),
-            taxon_node_map: HashMap::new(),
-            root: None,
-            heights_known: false,
-            branchlengths_known: false,
-        };
+        let mut me = MutableTree::new();
         let root = tree
             .get_root()
             .expect("every tree should have a root at least nominally");
@@ -140,16 +126,7 @@ impl MutableTree {
     }
 
     pub fn copy_subtree(tree: &MutableTree, node: TreeIndex, taxa: &HashSet<String>) -> Self {
-        let mut me = MutableTree {
-            nodes: Vec::new(),
-            external_nodes: Vec::new(),
-            internal_nodes: Vec::new(),
-            annotation_type: HashMap::new(),
-            taxon_node_map: HashMap::new(),
-            root: None,
-            heights_known: false,
-            branchlengths_known: false,
-        };
+        let mut me = MutableTree::new();
         me.tree_helper(tree, node, taxa);
         me.heights_known = true;
         me
@@ -597,10 +574,10 @@ impl MutableTree {
     }
 
     pub fn annotate_tree(&mut self,key: String, value: AnnotationValue){
-        unimplemented!();
+        self.tree_annotation.insert(key, value);
     }
     pub fn set_id(&mut self, id: String) {
-        unimplemented!();
+        self.id=Some(id);
     }
 }
 //TODO I don't like that this is not lazy

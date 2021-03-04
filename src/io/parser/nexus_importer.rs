@@ -4,66 +4,115 @@ use std::collections::{HashMap, HashSet};
 use crate::tree::AnnotationValue;
 use crate::io::error::IoError;
 use crate::io::parser::annotation_parser::AnnotationParser;
+use serde::de::value::StrDeserializer;
 
 type Byte = u8;
 type Result<T> = std::result::Result<T, IoError>;
 
-struct NexusImporter<R>{
+struct NexusImporter<R> {
     last_token: String,
-    last_byte:Option<u8>,
+    last_byte: Option<u8>,
     tree: Option<MutableTree>,
     reader: BufReader<R>,
     last_deliminator: u8,
     last_annotation: Option<HashMap<String, AnnotationValue>>,
-    taxa:Option<HashSet<String>>
+    taxa: HashSet<String>,
+    taxa_translation:HashMap<String,String>, // TODO make taxon
+    reading_trees:bool
+}
+enum NexusBlock{
+    TAXA,
+    TREES,
+    OTHER
 }
 
-impl <R: std::io::Read> NexusImporter<R>{
-    fn read_next_tree(&mut self) -> Result<MutableTree> {
-        if self.last_token.eq_ignore_ascii_case("UTREE") ||self.last_token.eq_ignore_ascii_case("TREE"){
-            if (self.last_byte == b'*') {
+impl<R: std::io::Read> NexusImporter<R> {
+    fn find_next_block(&mut self)->Result<NexusBlock>{
+        unimplemented!()
+    }
+    fn read_taxa_block(&mut self)->Result<()>{
+        unimplemented!()
+    }
+
+    fn read_translation_list(&mut self)->Result<()>{
+        let token = self.read_token(";")?;
+        if token.eq_ignore_ascii_case("TRANSLATE") {
+            loop {
+                let key = self.read_token(",;")?;
+                if self.last_deliminator == b',' || self.last_deliminator == b';' {
+                    Err(IoError::FORMAT("missing taxon label in translate section of trees block".to_string()))
+                } else {
+                    let taxon = self.read_token(",;")?;
+                    //TODO build from Taxa block if needed
+
+                    if let Some(key) = self.taxa_translation.insert(key, taxon) {
+                        Err(IoError::FORMAT("translate map uses " + key + "twice"))
+                    }
+                }
+                if self.last_deliminator==b';' {
+                    break;
+                }
+            }
+        }
+
+        self.read_token(";")?;
+        Ok(())
+
+    }
+    fn read_to_tree_block(&mut self){
+        unimplemented!();
+    }
+    fn read_next_tree(&mut self) -> Result<Option<MutableTree>> {
+        if !self.reading_trees{
+            self.read_to_tree_block()
+        }
+
+        if self.last_token.eq_ignore_ascii_case("UTREE") || self.last_token.eq_ignore_ascii_case("TREE") {
+            let start = std::time::Instant::now();
+            self.tree = Some(MutableTree::new());
+            if self.last_byte == Some(b'*') {
                 // Star is used to specify a default tree - ignore it
                 self.read_byte();
             }
+
             let label = self.read_token("=;")?;
             // ignoring comment that may have been picked up
             if self.last_deliminator != b'=' {
-                Err(IoError::FORMAT(format!("Missing  '=' or label for tree {}",token)))
-            }
-            if self.next_byte() != b'('{
+                Err(IoError::FORMAT(format!("Missing  '=' or label for tree {}", label.as_str())))
+            } else if self.next_byte()? != b'(' {
                 Err(IoError::FORMAT("Missing tree definition in TREE command of TREES block".to_string()))
-            }
-            let tree_annotation = self.last_annotation.take();
+            } else {
+                let tree_annotation = self.last_annotation.take();
 
-            self.tree = Some(MutableTree::new());
-            let root = self.read_internal_node()?;
-            //TODO hide node/node ref api
-            self.get_tree().set_root(Some(root));
-            self.get_tree().branchlengths_known = true;
-            self.get_tree().set_id(label);
+                let root = self.read_internal_node()?;
 
-            match self.last_deliminator {
-                b')' => Err(IoError::OTHER),
-                b';' => {
-                    trace!(
-                        "Tree parsed in {} milli seconds ",
-                        start.elapsed().as_millis()
-                    );
-                    if Some(annotation)=tree_annotation{
-                        for (key, value) in annotation.into_iter() {
-                            self.get_tree().annotate_tree( key, value);
+                self.get_tree().set_root(Some(root));
+                self.get_tree().branchlengths_known = true;
+                self.get_tree().set_id(label);
+
+                match self.last_deliminator {
+                    b')' => Err(IoError::FORMAT("Tree parsing ended with ')'".to_string())),
+                    b';' => {
+                        trace!(
+                            "Tree parsed in {} milli seconds ",
+                            start.elapsed().as_millis()
+                        );
+                        if let Some(annotation) = tree_annotation {
+                            for (key, value) in annotation.into_iter() {
+                                self.get_tree().annotate_tree(key, value);
+                            }
                         }
+                        self.read_token(";")?;
+                        Ok(self.tree.take())
                     }
-                    Ok(self.tree.take().unwrap())
+                    _ => Err(IoError::FORMAT("You may need to read to check for a root branch or annotation".to_string()))
                 }
-                _ => Err(IoError::FORMAT("You may need to read to check for a root branch or annotation".to_string()))
             }
-
-
-        }else{
-            //TODO
+        } else if self.last_token.eq_ignore_ascii_case("ENDBLOCK") || self.last_token.eq_ignore_ascii_case("END") {
+            Ok(None)
+        } else {
+            Err(IoError::FORMAT(String::from("unknown command in tree block") + &*self.last_token))
         }
-        unimplemented!()
     }
 
     fn read_internal_node(&mut self) -> Result<TreeIndex> {
@@ -291,15 +340,25 @@ impl <R: std::io::Read> NexusImporter<R>{
     }
 }
 
+impl<R: std::io::Read> Iterator for NexusImporter<R> {
+    type Item = MutableTree;
+    fn next(&mut self) -> Option<Self::Item> {
+            let tree = self.read_next_tree();
+            match tree {
+                Ok(node) => node,
+                Err(e) => panic!("parsing error {}", e),
+            }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::io::Read;
 
     #[test]
-    fn test(){
+    fn test() {
         let mut b = "This string will be read".as_bytes();
         char::from(4);
     }
-
 }
