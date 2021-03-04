@@ -4,7 +4,8 @@ use std::error::Error;
 #[derive(Debug, Clone)]
 pub enum IoError{
     EOF,
-    OTHER
+    FORMAT(String),
+    OTHER,
 }
 impl Error for IoError{}
 impl fmt::Display for IoError {

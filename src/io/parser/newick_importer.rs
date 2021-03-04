@@ -13,11 +13,10 @@ use crate::io::parser::annotation_parser::AnnotationParser;
 type Result<T> = std::result::Result<T, IoError>;
 type Byte = u8;
 
-//https://stackoverflow.com/questions/36088116/how-to-do-polymorphic-io-from-either-a-file-or-stdin-in-rust/49964042
 pub struct NewickImporter<R> {
-    last_token: Option<u8>,
+    last_byte: Option<u8>,
     tree: Option<MutableTree>,
-    reader: Box<BufReader<R>>,
+    reader: BufReader<R>,
     last_deliminator: u8,
     last_annotation: Option<HashMap<String, AnnotationValue>>,
 }
@@ -25,20 +24,20 @@ pub struct NewickImporter<R> {
 impl<R: std::io::Read> NewickImporter<R> {
     pub fn from_reader(reader:R)->Self{
         NewickImporter {
-            last_token: None,
+            last_byte: None,
             //TODO better cleaner api through new.
             tree: None,
-            reader: Box::new(BufReader::new(reader)),
+            reader: BufReader::new(reader),
             last_annotation: None,
             last_deliminator: b'\0',
         }
     }
     pub fn read_tree(input_reader: BufReader<R>) -> Result<MutableTree> {
         let mut parser = NewickImporter {
-            last_token: None,
+            last_byte: None,
             //TODO better cleaner api through new.
             tree: None,
-            reader: Box::new(input_reader),
+            reader: input_reader,
             last_annotation: None,
             last_deliminator: b'\0',
         };
@@ -49,7 +48,7 @@ impl<R: std::io::Read> NewickImporter<R> {
         let start = std::time::Instant::now();
         self.tree = Some(MutableTree::new());
         self.skip_until(b'(')?;
-        self.unread_token(b'(');
+        self.unread_byte(b'(');
 
         let root = self.read_internal_node()?;
         //TODO hide node/node ref api
@@ -69,7 +68,7 @@ impl<R: std::io::Read> NewickImporter<R> {
         }
     }
     fn read_internal_node(&mut self) -> Result<TreeIndex> {
-        let token = self.read_token()?;
+        let token = self.read_byte()?;
         //assert =='('
         let mut children = vec![];
         children.push(self.read_branch()?);
@@ -84,7 +83,7 @@ impl<R: std::io::Read> NewickImporter<R> {
             // throw new BadFormatException("Missing closing ')' in tree");
             Err(IoError::OTHER)
         } else {
-            let label = self.read_to_token(",:();")?;
+            let label = self.read_token(",:();")?;
             let node = self.get_tree().make_internal_node(children);
             if !label.is_empty() {
                 self.get_tree().label_node(node, label);
@@ -95,7 +94,7 @@ impl<R: std::io::Read> NewickImporter<R> {
         }
     }
     fn read_external_node(&mut self) -> Result<TreeIndex> {
-        let label = self.read_to_token(",:();")?;
+        let label = self.read_token(",:();")?;
         let node = self.get_tree().make_external_node(label.as_str(), None).expect("Failed to make tip");
         self.annotation_node(node);
 
@@ -104,7 +103,7 @@ impl<R: std::io::Read> NewickImporter<R> {
     fn read_branch(&mut self) -> Result<TreeIndex> {
         let mut length = 0.0;
 
-        let branch = if self.next_token()? == b'(' {
+        let branch = if self.next_byte()? == b'(' {
             // is an internal node
             self.read_internal_node()?
         } else {
@@ -122,15 +121,15 @@ impl<R: std::io::Read> NewickImporter<R> {
 
         Ok(branch)
     }
-    fn unread_token(&mut self, c: Byte) {
-        self.last_token = Some(c);
+    fn unread_byte(&mut self, c: Byte) {
+        self.last_byte = Some(c);
     }
 
-    fn next_token(&mut self) -> Result<Byte> {
-        match self.last_token {
+    fn next_byte(&mut self) -> Result<Byte> {
+        match self.last_byte {
             None => {
-                let c = self.read_token()?;
-                self.last_token = Some(c);
+                let c = self.read_byte()?;
+                self.last_byte = Some(c);
                 Ok(c)
             }
             Some(c) => {
@@ -138,7 +137,7 @@ impl<R: std::io::Read> NewickImporter<R> {
             }
         }
     }
-    fn read_token(&mut self) -> Result<Byte> {
+    fn read_byte(&mut self) -> Result<Byte> {
         self.skip_space()?;
         let mut ch = self.read()?;
         // while hasComments && (ch == startComment || ch == lineComment) {
@@ -151,7 +150,7 @@ impl<R: std::io::Read> NewickImporter<R> {
         Ok(ch)
     }
 
-    fn read_to_token(&mut self, deliminator: &str) -> Result<String> {
+    fn read_token(&mut self, deliminator: &str) -> Result<String> {
         let delims = deliminator.bytes().collect::<Vec<Byte>>();
         let mut space = 0;
         let mut ch = b'\0';
@@ -162,7 +161,7 @@ impl<R: std::io::Read> NewickImporter<R> {
         let mut first = true;
         let mut quoted = false;
 
-        self.next_token()?;
+        self.next_byte()?;
         let mut token = String::new();
         while !done {
             ch = self.read()?;
@@ -173,7 +172,7 @@ impl<R: std::io::Read> NewickImporter<R> {
                     token.push(char::from(ch));
                 } else {
                     // self.last_deliminator=' ';
-                    self.unread_token(ch2);
+                    self.unread_byte(ch2);
                     // done=true;
                     quoted = false;
                 }
@@ -210,13 +209,13 @@ impl<R: std::io::Read> NewickImporter<R> {
             }
         }
         if char::from(self.last_deliminator).is_whitespace() {
-            ch = self.next_token()?;
+            ch = self.next_byte()?;
             while char::from(ch).is_whitespace() {
                 self.read()?;
-                ch = self.next_token()?;
+                ch = self.next_byte()?;
             }
             if !delims.contains(&ch) {
-                self.last_deliminator = self.read_token()?;
+                self.last_deliminator = self.read_byte()?;
             }
         }
 
@@ -224,7 +223,7 @@ impl<R: std::io::Read> NewickImporter<R> {
     }
 
     fn read_double(&mut self, deliminator: &str) -> Result<f64> {
-        let s = self.read_to_token(deliminator)?;
+        let s = self.read_token(deliminator)?;
         //TODO capture this error
 
         match s.parse() {
@@ -235,7 +234,7 @@ impl<R: std::io::Read> NewickImporter<R> {
 
     fn read(&mut self) -> Result<Byte> {
         let mut buf: [u8; 1] = [0; 1];
-        match self.last_token {
+        match self.last_byte {
             None => {
                 match self.reader.read(&mut buf) {
                     Ok(1) => Ok(buf[0]),
@@ -244,7 +243,7 @@ impl<R: std::io::Read> NewickImporter<R> {
                 }
             }
             Some(c) => {
-                self.last_token = None;
+                self.last_byte = None;
                 Ok(c)
             }
         }
@@ -255,14 +254,14 @@ impl<R: std::io::Read> NewickImporter<R> {
         while char::from(ch).is_whitespace() {
             ch = self.read()?;
         }
-        self.unread_token(ch);
+        self.unread_byte(ch);
         Ok(())
     }
     fn skip_comments(&mut self, c: Byte) -> Result<()> {
         let mut comment = String::from(char::from(c));
-        comment.push_str(self.read_to_token("(),:;")?.as_str());
+        comment.push_str(self.read_token("(),:;")?.as_str());
         while self.last_deliminator == b' ' {
-            comment.push_str(self.read_to_token("(),:;")?.as_str());
+            comment.push_str(self.read_token("(),:;")?.as_str());
         };
         if let Ok(annotation) = AnnotationParser::parse_annotation(comment.as_str()) {
             self.last_annotation = Some(annotation);
@@ -273,9 +272,9 @@ impl<R: std::io::Read> NewickImporter<R> {
     }
 
     fn skip_until(&mut self, c: Byte) -> Result<Byte> {
-        let mut ch: Byte = self.read_token()?;
+        let mut ch: Byte = self.read_byte()?;
         while ch != c {
-            ch = self.read_token()?;
+            ch = self.read_byte()?;
         }
         Ok(ch)
     }
@@ -295,7 +294,7 @@ impl<R: std::io::Read> NewickImporter<R> {
     fn has_tree(&mut self) -> bool {
        match self.skip_until(b'('){
             Ok(_Byte)=>{
-                self.unread_token(b'(');
+                self.unread_byte(b'(');
                 true
             },
            Err(IoError::EOF)=>false,

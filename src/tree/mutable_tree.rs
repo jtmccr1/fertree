@@ -7,6 +7,7 @@ use std::option::Option;
 pub type TreeIndex = usize;
 
 //TODO think more about missing data. Should these be options? Should they be guaranteed
+//TODO add tree annotation
 //TODO adopt nodeorder
 #[derive(Debug)]
 pub struct MutableTreeNode {
@@ -593,6 +594,13 @@ impl MutableTree {
         } else {
             None
         }
+    }
+
+    pub fn annotate_tree(&mut self,key: String, value: AnnotationValue){
+        unimplemented!();
+    }
+    pub fn set_id(&mut self, id: String) {
+        unimplemented!();
     }
 }
 //TODO I don't like that this is not lazy
