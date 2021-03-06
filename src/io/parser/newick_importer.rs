@@ -183,7 +183,7 @@ impl<R: std::io::Read> NewickImporter<R> {
                 space = 0;
             } else if ch == b'[' {
                 self.skip_comments(ch)?;
-                // self.last_deliminator=' ';
+                self.last_deliminator=b' ';
                 done = true
             } else {
                 if quoted {
@@ -214,7 +214,8 @@ impl<R: std::io::Read> NewickImporter<R> {
                 self.read()?;
                 ch = self.next_byte()?;
             }
-            if !delims.contains(&ch) {
+
+            if delims.contains(&ch) {
                 self.last_deliminator = self.read_byte()?;
             }
         }
@@ -259,10 +260,17 @@ impl<R: std::io::Read> NewickImporter<R> {
     }
     fn skip_comments(&mut self, c: Byte) -> Result<()> {
         let mut comment = String::from(char::from(c));
-        comment.push_str(self.read_token("(),:;")?.as_str());
-        while self.last_deliminator == b' ' {
-            comment.push_str(self.read_token("(),:;")?.as_str());
-        };
+        let mut comment_depth =1;
+        while comment_depth>0{
+            let ch = self.read()?;
+            if ch==b'['{
+                comment_depth+=1;
+            }else if ch==b']'{
+                comment_depth-=1;
+            }
+            comment.push(char::from(ch));
+        }
+        debug!("Comment: {}",comment);
         if let Ok(annotation) = AnnotationParser::parse_annotation(comment.as_str()) {
             self.last_annotation = Some(annotation);
             Ok(())
@@ -319,3 +327,80 @@ impl<R: std::io::Read> Iterator for NewickImporter<R> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn general_parse() {
+        let tree = NewickImporter::read_tree(BufReader::new("(a:1,b:4)l;".as_bytes())).unwrap();
+        let root = tree.get_root().unwrap();
+        let label = tree.get_label(root).unwrap();
+        assert_eq!( label,"l");
+        let mut names = vec![];
+        for child in tree.get_children(root).iter() {
+            if let Some(t) = tree.get_taxon(*child) {
+                names.push(t)
+            }
+        }
+        assert_eq!(names, vec!["a", "b"]);
+
+        let mut bl = vec![];
+        if let Some(l) = tree.get_length(root) {
+            bl.push(l);
+        }
+        for child in tree.get_children(root).iter() {
+            if let Some(t) = tree.get_length(*child) {
+                bl.push(t)
+            }
+        }
+        assert_eq!(bl, vec![ 1.0, 4.0]);
+    }
+
+    #[test]
+    fn scientific() {
+        let tree = NewickImporter::read_tree(BufReader::new("(a:1E1,b:2e-5)l;".as_bytes())).unwrap();
+        let root = tree.get_root().unwrap();
+        let mut bl = vec![];
+        if let Some(l) = tree.get_length(root) {
+            bl.push(l);
+        }
+        for child in tree.get_children(root).iter() {
+            if let Some(t) = tree.get_length(*child) {
+                bl.push(t)
+            }
+        }
+        assert_eq!(bl, vec![10.0, 0.00002]);
+    }
+
+    #[test]
+    fn quoted() {
+        assert!(true, NewickImporter::read_tree(BufReader::new( "('234] ':1,'here a *':1);".as_bytes())).is_ok());
+    }
+
+    #[test]
+    fn comment() {
+        assert!(NewickImporter::read_tree(BufReader::new("(a[&test=ok],b:1);".as_bytes())).is_ok());
+    }
+    #[test]
+    fn double_comment() {
+        assert!(NewickImporter::read_tree(BufReader::new("(a[&test=ok,value=0.9],b:1);".as_bytes())).is_ok());
+    }
+
+    #[test]
+    fn whitespace() {
+        assert!(NewickImporter::read_tree(BufReader::new("  (a,b:1);\t".as_bytes())).is_ok());
+    }
+
+    #[test]
+    fn should_error() {
+        let out = NewickImporter::read_tree(BufReader::new("('234] ','here a *')".as_bytes()));
+        assert_eq!(true, out.is_err())
+    }
+
+    #[test]
+    fn should_error_again() {
+        let out = NewickImporter::read_tree(BufReader::new("(a,b));".as_bytes()));
+        assert_eq!(true, out.is_err())
+    }
+}

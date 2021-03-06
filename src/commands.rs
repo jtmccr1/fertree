@@ -115,13 +115,17 @@ pub(crate) mod clades {
         if monophyletic_groups.0 {
             warn!("The whole tree is a monophyletic clade!")
         }
+        let pre = if let Some(s)=prefix{
+            s.clone()
+        }else{"".to_string()};
         let mut counter=0;
         for group in monophyletic_groups.1.iter() {
-            if group.len()>0 {
+
+            if group.len()>1 {
                 for node in group {
-                    tree.annotate_node(*node, String::from("Clade"), AnnotationValue::Discrete(format!("{}_{}", value, counter)));
-                    counter += 1;
+                    tree.annotate_node(*node, String::from("Clade"), AnnotationValue::Discrete(format!("{}_{}.{}",pre, value, counter)));
                 }
+                counter += 1;
             }
         }
 

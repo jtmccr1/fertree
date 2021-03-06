@@ -9,6 +9,7 @@ type Node<'i> = pest_consume::Node<'i, Rule, ()>;
 #[derive(Parser)]
 #[grammar = "./io/parser/tree_annotation.pest"]
 pub struct AnnotationParser;
+
 #[pest_consume::parser]
 impl AnnotationParser {
     fn annotation(input: Node) -> PestResult<(String, AnnotationValue)> {
@@ -46,10 +47,29 @@ impl AnnotationParser {
     }
 
     fn key(input: Node) -> PestResult<String> {
+        Ok(match_nodes!(input.into_children();
+        [unquoted_name(n)]=>n,
+        [quoted_name(n)]=>n,
+      ))
+    }
+    fn unquoted_name(input: Node) -> PestResult<String> {
         let name = input.as_str();
         Ok(name.to_string())
     }
-
+    fn quoted_name(input: Node) -> PestResult<String> {
+        Ok(match_nodes!(input.into_children();
+        [single_inner(n)]=>n,
+        [double_inner(n)]=>n,
+      ))
+    }
+    fn single_inner(input: Node) -> PestResult<String> {
+        let name = input.as_str();
+        Ok(name.to_string())
+    }
+    fn double_inner(input: Node) -> PestResult<String> {
+        let name = input.as_str();
+        Ok(name.to_string())
+    }
     fn value(input: Node) -> PestResult<AnnotationValue> {
         Ok(match_nodes!(input.into_children();
             [continuous(n)]=>n,
@@ -73,8 +93,10 @@ impl AnnotationParser {
         Ok(AnnotationValue::Continuous(x.unwrap()))
     }
     fn discrete(input: Node) -> PestResult<AnnotationValue> {
-        let name = input.as_str().to_string();
-        Ok(AnnotationValue::Discrete(name))
+        Ok(match_nodes!(input.into_children();
+        [unquoted_name(n)]=>AnnotationValue::Discrete(n),
+        [quoted_name(n)]=>AnnotationValue::Discrete(n),
+      ))
     }
     fn set(input: Node) -> PestResult<AnnotationValue> {
         let set = match_nodes!(input.into_children();
@@ -83,11 +105,47 @@ impl AnnotationParser {
         Ok(AnnotationValue::Set(set))
     }
 }
-impl AnnotationParser{
-    pub(crate) fn parse_annotation(s:&str) ->PestResult<HashMap<String,AnnotationValue>>{
+
+impl AnnotationParser {
+    pub(crate) fn parse_annotation(s: &str) -> PestResult<HashMap<String, AnnotationValue>> {
         let inputs = AnnotationParser::parse(Rule::node_annotation, s)?;
         // There should be a single root node in the parsed tree
         let input = inputs.single()?;
         AnnotationParser::node_annotation(input)
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn discrete() {
+        let mut exp = HashMap::new();
+        exp.insert("location".to_owned(), AnnotationValue::Discrete("UK".to_owned()));
+
+        assert_eq!(AnnotationParser::parse_annotation("[&location=UK]").unwrap(), exp);
+    }
+
+    #[test]
+    fn discrete_quotes() {
+        let mut exp = HashMap::new();
+        exp.insert("location".to_owned(), AnnotationValue::Discrete("UK".to_owned()));
+        assert_eq!(AnnotationParser::parse_annotation("[&location=\"UK\"]").unwrap(), exp);
+    }
+
+    #[test]
+    fn quoted_key() {
+        let mut exp = HashMap::new();
+        exp.insert("location".to_owned(), AnnotationValue::Discrete("UK".to_owned()));
+        assert_eq!(AnnotationParser::parse_annotation("[&'location'=UK]").unwrap(), exp);
+    }
+    #[test]
+    fn multiple_commnet() {
+        let mut exp = HashMap::new();
+        exp.insert("location".to_owned(), AnnotationValue::Discrete("UK".to_owned()));
+        exp.insert("lat".to_owned(), AnnotationValue::Continuous(0.0));
+        assert_eq!(AnnotationParser::parse_annotation("[&location=UK,lat=0.0]").unwrap(), exp);
     }
 }

@@ -41,9 +41,7 @@ fn write_node(tree: &MutableTree, node_ref: TreeIndex) -> String {
     }
     s.push_str(write_annotations(tree, node_ref).as_str());
     if let Some(label) = tree.get_node_label(node_ref) {
-        s.push('\'');
         s.push_str(label);
-        s.push('\'');
 
     }
     if let Some(l) = tree.get_length(node_ref) {
@@ -78,7 +76,10 @@ fn write_annotations(tree: &MutableTree, node_ref: TreeIndex) -> String {
 
 pub fn write_annotation(key: &str, value: Option<&AnnotationValue>) -> String {
     if let Some(annotation) = value {
-        let value_string = annotation.to_string();
+        let value_string = match annotation{
+            AnnotationValue::Discrete(_)=>"\"".to_string()+annotation.to_string().as_str()+"\"",
+            _ => annotation.to_string(),
+        };
         format!("{}={}", key, value_string)
     } else {
         "".to_string()
@@ -90,6 +91,8 @@ mod tests {
     use crate::io::parser::newick_parser::NewickParser;
     use crate::tree::fixed_tree::FixedNode;
     use crate::tree::mutable_tree::MutableTree;
+    use crate::io::parser::newick_importer::NewickImporter;
+    use std::io::BufReader;
 
     #[test]
     fn basic_tree() {
@@ -110,24 +113,34 @@ mod tests {
         assert_eq!("((:1,:2):0.1,:1);", tree.to_string());
     }
     #[test]
-    fn tree_with_annotations() {
+    fn tree_with_quoted_annotations() {
+        let s = "((A[&location=\"UK\"]:0.3,B[&location=\"USA\"]:0.05):0.9,C[&location=\"US\"]:0.1);";
+        let tree = NewickImporter::read_tree(BufReader::new(s.as_bytes())).expect("error in parsing");
+        assert_eq!( tree.to_string(),s)
+    }
+    fn tree_with_unquoted_annotations() {
         let s = "((A[&location=UK]:0.3,B[&location=USA]:0.05):0.9,C[&location=US]:0.1);";
-        let tree = NewickParser::parse_string(s.as_bytes()).expect("error in parsing");
-        assert_eq!(s, tree.to_string())
+        let tree = NewickImporter::read_tree(BufReader::new(s.as_bytes())).expect("error in parsing");
+       let exp = "((A[&location=\"UK\"]:0.3,B[&location=\"USA\"]:0.05):0.9,C[&location=\"US\"]:0.1);";
+
+        assert_eq!( tree.to_string(),exp)
     }
     #[test]
     fn tree_with_label() {
-        let s = "((A[&location=UK]:0.3,B[&location=USA]:0.05)label:0.9,C[&location=US]:0.1);";
-        let tree = NewickParser::parse_string(s.as_bytes()).expect("error in parsing");
+        let s = "((A:0.3,B:0.05)label:0.9,C:0.1);";
+        let tree = NewickImporter::read_tree(BufReader::new(s.as_bytes())).expect("error in parsing");
         println!("{:?}", tree.get_internal_node(1));
-        assert_eq!(s, tree.to_string())
+        let exp = "((A:0.3,B:0.05)label:0.9,C:0.1);";
+
+        assert_eq!(exp, tree.to_string())
     }
 
     #[test]
     fn tree_with_quotes() {
         let s = "((A[&location=UK]:0.3,B[&location=USA]:0.05):0.9,'C d'[&location=US]:0.1);";
-        let tree = NewickParser::parse_string(s.as_bytes()).expect("error in parsing");
-        println!("{}",tree);
-        assert_eq!(s, tree.to_string())
+        let tree = NewickImporter::read_tree(BufReader::new(s.as_bytes())).expect("error in parsing");
+        let exp = "((A[&location=\"UK\"]:0.3,B[&location=\"USA\"]:0.05):0.9,'C d'[&location=\"US\"]:0.1);";
+
+        assert_eq!(tree.to_string(),exp)
     }
 }
