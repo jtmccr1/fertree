@@ -10,41 +10,77 @@
 //     fn label_introductions(tree: FixedNode) {}
 // }
 
-mod thin {}
 
-pub(crate) mod collapse {
+pub(crate) mod clades {
     use rebl::io::parser::newick_importer;
     use rebl::tree::mutable_tree::{MutableTree, TreeIndex};
     use rebl::tree::AnnotationValue;
     use std::collections::HashSet;
+    use structopt::StructOpt;
 
     use rand::seq::SliceRandom;
     use std::error::Error;
     use std::io::Write;
 
+    #[derive(Debug, StructOpt)]
+    pub struct SharedOptions{
+        #[structopt(short, long, help = "annotation key we are collapsing by. must be discrete")]
+        annotation: String,
+        #[structopt(short, long, help = "annotation value we are collapsing by")]
+        value: String,
+    }
+    #[derive(Debug, StructOpt)]
+    pub enum SubCommands {
+        /// annotate tips with unique clade key based on annotation
+        Label{
+            #[structopt(short, long, help = "prefix for output annotation, if not provided defaults to 'annotation_value.' - Not implemented")]
+            prefix:Option<String>,
+            #[structopt(short, long, help = "annotation key we are collapsing by. must be discrete")]
+            annotation: String,
+            #[structopt(short, long, help = "annotation value we are collapsing by")]
+            value: String,
+        },
+        /// Collapse monophyletic clades
+        Collapse{
+            #[structopt(short, long, help = "annotation key we are collapsing by. must be discrete")]
+            annotation: String,
+            #[structopt(short, long, help = "annotation value we are collapsing by")]
+            value: String,
+            #[structopt(short, long, help = "the minimum clade size", default_value = "1")]
+            min_size: usize,
+        },
+    }
+
+
+
     //TODO set random seed.
     pub fn run<R:std::io::Read>(
         trees: newick_importer::NewickImporter<R>,
-        key: String,
-        value: String,
-        min_size: usize,
-    ) -> Result<(), Box<dyn Error>> {
+       cmd:SubCommands) -> Result<(), Box<dyn Error>> {
+
+
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
         for mut tree in trees {
-            tree.calc_node_heights();
-            let new_tree = collapse_uniform_clades(&tree, &key, &value, min_size);
-            writeln!(handle, "{}", new_tree)?;
+            match cmd {
+                SubCommands::Collapse{ref annotation,ref value, min_size}=> {
+
+                    let new_tree = collapse_uniform_clades(&mut tree, &annotation, &value, min_size);
+                    writeln!(handle, "{}", new_tree)?;
+                },
+                SubCommands::Label{ref annotation,ref value,ref prefix}=>{
+                    annotate_uniform_clades(&mut tree, &annotation, &value, &prefix);
+                    writeln!(handle, "{}", tree)?;
+                } ,
+
+            }
         }
         Ok(())
     }
 
-    pub fn collapse_uniform_clades(
-        tree: &MutableTree,
-        key: &str,
-        value: &str,
-        min_size: usize,
-    ) -> MutableTree {
+    pub fn collapse_uniform_clades(tree: &mut MutableTree,key: &str, value: &str, min_size: usize) -> MutableTree {
+        tree.calc_node_heights();
+
         let mut taxa: HashSet<String> = tree
             .external_nodes
             .iter()
@@ -70,6 +106,26 @@ pub(crate) mod collapse {
         }
         info!("Removed : {} taxa", removed);
         MutableTree::from_tree(tree, &taxa)
+    }
+
+    fn annotate_uniform_clades(tree:&mut MutableTree,key:&str,value:&str,prefix:&Option<String>){
+
+        let monophyletic_groups =
+            get_monophyletic_groups(tree, tree.get_root().unwrap(), key, value);
+        if monophyletic_groups.0 {
+            warn!("The whole tree is a monophyletic clade!")
+        }
+        let mut counter=0;
+        for group in monophyletic_groups.1.iter() {
+            if group.len()>0 {
+                for node in group {
+                    tree.annotate_node(*node, String::from("Clade"), AnnotationValue::Discrete(format!("{}_{}", value, counter)));
+                    counter += 1;
+                }
+            }
+        }
+
+
     }
 
     fn get_monophyletic_groups(

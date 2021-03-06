@@ -40,23 +40,23 @@ impl<R: std::io::Read> NexusImporter<R> {
             loop {
                 let key = self.read_token(",;")?;
                 if self.last_deliminator == b',' || self.last_deliminator == b';' {
-                    Err(IoError::FORMAT("missing taxon label in translate section of trees block".to_string()))
+                   break Err(IoError::FORMAT("missing taxon label in translate section of trees block".to_string()));
                 } else {
                     let taxon = self.read_token(",;")?;
                     //TODO build from Taxa block if needed
 
                     if let Some(key) = self.taxa_translation.insert(key, taxon) {
-                        Err(IoError::FORMAT("translate map uses " + key + "twice"))
+                       break Err(IoError::FORMAT("translate map uses ".to_string() + &key + "twice"))
                     }
                 }
                 if self.last_deliminator==b';' {
-                    break;
+                    break Ok(())
                 }
             }
+        }else{
+            self.read_token(";")?;
+            Ok(())
         }
-
-        self.read_token(";")?;
-        Ok(())
 
     }
     fn read_to_tree_block(&mut self){

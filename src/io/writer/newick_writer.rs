@@ -41,7 +41,10 @@ fn write_node(tree: &MutableTree, node_ref: TreeIndex) -> String {
     }
     s.push_str(write_annotations(tree, node_ref).as_str());
     if let Some(label) = tree.get_node_label(node_ref) {
-        s.push_str(label)
+        s.push('\'');
+        s.push_str(label);
+        s.push('\'');
+
     }
     if let Some(l) = tree.get_length(node_ref) {
         s.push(':');

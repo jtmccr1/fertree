@@ -1,7 +1,7 @@
 mod commands;
 
 use crate::commands::split;
-use commands::{annotate, collapse, extract, resolve, stats};
+use commands::{annotate, clades, extract, resolve, stats};
 use rebl::io::parser::newick_importer;
 use std::{io, path};
 use structopt::StructOpt;
@@ -53,17 +53,9 @@ enum Fertree {
         cmd: extract::SubCommands,
     },
     /// Collapse (i.e. subsample) monophyletic clades into a set number of tips
-    Collapse {
-        #[structopt(
-        short,
-        long,
-        help = "annotation key we are collapsing by. must be discrete"
-        )]
-        annotation: String,
-        #[structopt(short, long, help = "annotation value we are collapsing by")]
-        value: String,
-        #[structopt(short, long, help = "the minimum clade size", default_value = "1")]
-        min_size: usize,
+    Clades {
+        #[structopt(subcommand)]
+        cmd:clades::SubCommands,
     },
     /// Split an input tree into subtrees of set sizes.
     ///
@@ -152,11 +144,7 @@ fn run_commands<R:std::io::Read>(tree_importer:NewickImporter<R>,cmd:Fertree)->R
         Fertree::Stats { cmd } => stats::run(tree_importer, cmd),
         Fertree::Annotate { traits } => annotate::run(tree_importer, traits),
         Fertree::Extract { cmd } => extract::run(tree_importer, cmd),
-        Fertree::Collapse {
-            annotation,
-            value,
-            min_size,
-        } => collapse::run(tree_importer, annotation, value, min_size),
+        Fertree::Clades {cmd}=> clades::run(tree_importer, cmd),
         Fertree::Split {
             min_size,
             explore,

@@ -17,7 +17,7 @@ pub enum AnnotationValue {
 impl fmt::Display for AnnotationValue {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            AnnotationValue::Discrete(string) => write!(f, "{}", string),
+            AnnotationValue::Discrete(string) => write!(f, "\"{}\"", string),
             AnnotationValue::Continuous(f64) => write!(f, "{}", f64.to_string()),
             AnnotationValue::Set(s) => {
                 let s = s
