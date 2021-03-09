@@ -23,15 +23,72 @@ struct NexusImporter<R> {
 enum NexusBlock{
     TAXA,
     TREES,
-    OTHER
 }
 
 impl<R: std::io::Read> NexusImporter<R> {
+
+    fn prep_for_trees(&mut self) ->Result<(bool)>{
+        let block = self.find_next_block()?;
+        match block{
+            NexusBlock::TAXA=>self.read_taxa_block()?,
+            NexusBlock::TREES=>{},
+        }
+    }
+
+
     fn find_next_block(&mut self)->Result<NexusBlock>{
-        unimplemented!()
+        loop {
+            let token = read_token("")?;
+            if token.eq_ignore_ascii_case("begin"){
+                break;
+            }
+        }
+        let block = read_token("")?;
+        if block.eq_ignore_ascii_case("taxa") {
+            Ok(NexusBlock::TAXA)
+        }else if block.eq_ignore_ascii_case("trees"){
+            Ok(NexusBlock::TREES)
+        }else{
+            Err(IoError::FORMAT("unsupported nexus block" + block))
+        }
+    }
+    fn find_end_block(&mut self)->Result<()>{
+        loop {
+            let token = read_token(";")?;
+            if token.eq_ignore_ascii_case("end")||token.eq_ignore_ascii_case("endblock"){
+                break;
+            }
+        }
+        Ok(())
     }
     fn read_taxa_block(&mut self)->Result<()>{
-        unimplemented!()
+        let mut taxa_count =0;
+        let token = self.read_token("")?;
+        if token.eq_ignore_ascii_case("DIMENSIONS") {
+            let token2 = read_token("=;")?;
+            if token2.eq_ignore_ascii_case("NTAX") {
+                taxa_count = read_token(";")?.parse();
+            }else{
+                Err(IoError::FORMAT("missing ntax tag".to_string()))
+            }
+        }
+
+        loop {
+            let taxa = self.read_token(";")?.trim();
+            if taxa.len()>0 {
+                let uniq = self.taxa.insert(taxa.to_string());
+                if !uniq{
+                    Err(IoError::DuplicateTaxon("duplicated taxa:"+taxa))
+                }
+            }
+            if self.last_deliminator==b';' {
+                break;
+            }
+        }
+        if taxa_count!= self.taxa.len(){
+            Err(IoError::FORMAT("taxa count does not match ntax tag".to_string()));
+        }
+        Ok(())
     }
 
     fn read_translation_list(&mut self)->Result<()>{
@@ -59,6 +116,8 @@ impl<R: std::io::Read> NexusImporter<R> {
         }
 
     }
+
+
     fn read_to_tree_block(&mut self){
         unimplemented!();
     }
@@ -262,7 +321,8 @@ impl<R: std::io::Read> NexusImporter<R> {
                 self.read()?;
                 ch = self.next_byte()?;
             }
-            if !delims.contains(&ch) {
+
+            if delims.contains(&ch) {
                 self.last_deliminator = self.read_byte()?;
             }
         }
@@ -307,10 +367,17 @@ impl<R: std::io::Read> NexusImporter<R> {
     }
     fn skip_comments(&mut self, c: Byte) -> Result<()> {
         let mut comment = String::from(char::from(c));
-        comment.push_str(self.read_token("(),:;")?.as_str());
-        while self.last_deliminator == b' ' {
-            comment.push_str(self.read_token("(),:;")?.as_str());
-        };
+        let mut comment_depth =1;
+        while comment_depth>0{
+            let ch = self.read()?;
+            if ch==b'['{
+                comment_depth+=1;
+            }else if ch==b']'{
+                comment_depth-=1;
+            }
+            comment.push(char::from(ch));
+        }
+        debug!("Comment: {}",comment);
         if let Ok(annotation) = AnnotationParser::parse_annotation(comment.as_str()) {
             self.last_annotation = Some(annotation);
             Ok(())

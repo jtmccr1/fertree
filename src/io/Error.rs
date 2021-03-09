@@ -5,6 +5,7 @@ use std::error::Error;
 pub enum IoError{
     EOF,
     FORMAT(String),
+    DuplicateTaxon(String),
     OTHER,
 }
 impl Error for IoError{}
