@@ -6,9 +6,10 @@ use std::{io, path};
 use structopt::StructOpt;
 use std::fs::File;
 use rebl::io::parser::tree_importer::TreeImporter;
-use std::io::Read;
+use std::io::{Read, StdinLock};
 use std::error::Error;
 use rebl::io::parser::{nexus_importer, newick_importer};
+use rebl::io::parser::nexus_importer::NexusImporter;
 
 #[macro_use]
 extern crate log;
@@ -69,11 +70,7 @@ enum Fertree {
         help = "Don't split tree but print the number of trees at different cut-offs"
         )]
         explore: bool,
-        #[structopt(
-        short,
-        long,
-        help = "relax the minimum clade size so that the root subtree is a separate subtree."
-        )]
+        #[structopt(short, long, help = "relax the minimum clade size so that the root subtree is a separate subtree.")]
         relaxed: bool,
         #[structopt(
         short,
@@ -92,21 +89,10 @@ enum Fertree {
 
 #[derive(Debug, StructOpt)]
 pub struct Common {
-    #[structopt(
-    short,
-    long,
-    parse(from_os_str),
-    help = "input tree file",
-    global = true
-    )]
-    infile: Option<path::PathBuf>,
-    #[structopt(
-    short,
-    long,
-    global = true,
-    help = "tree is in nexus format",
-    )]
+    #[structopt(short, long,global =true, help = "tree is in nexus format")]
     nexus: bool,
+    #[structopt(short, long, parse(from_os_str), help = "input tree file", global = true)]
+    infile: Option<path::PathBuf>,
     // #[structopt(short, long, parse(from_os_str), help = "output tree file", global = true)]
     // outfile: Option<path::PathBuf>,
     // //TODO implement this log file option
@@ -125,23 +111,23 @@ fn main() {
 
         Some(path) => {
             if args.common.nexus{
-                let import = nexus_importer::NexusImporter::from_reader(File::open(path).expect(&*format!("issue with path ")));
-                run_commands(import,args.cmd)
+                let importer: NexusImporter<File> = nexus_importer::NexusImporter::from_reader(File::open(path).expect("issue with path "));
+                run_commands(importer,args.cmd)
             }else{
-                let import = newick_importer::NewickImporter::from_reader(File::open(path).expect(&*format!("issue with path ")));
-                run_commands(import,args.cmd)
-            };
+                let importer = newick_importer::NewickImporter::from_reader(File::open(path).expect("issue with path "));
+                run_commands(importer,args.cmd)
+            }
         },
         None => {
          if args.common.nexus {
-                let importer = nexus_importer::NexusImporter::from_reader(stdin.lock());
+                let importer:NexusImporter<StdinLock> = nexus_importer::NexusImporter::from_reader(stdin.lock());
                 run_commands(importer,args.cmd)
 
             }else{
                let importer = newick_importer::NewickImporter::from_reader(stdin.lock());
                 run_commands(importer,args.cmd)
 
-            };
+            }
         },
     };
 

@@ -9,6 +9,7 @@ use crate::io::error::{IoError};
 use std::collections::HashMap;
 use crate::tree::AnnotationValue;
 use crate::io::parser::annotation_parser::AnnotationParser;
+use crate::io::parser::tree_importer::TreeImporter;
 
 type Result<T> = std::result::Result<T, IoError>;
 type Byte = u8;
@@ -22,7 +23,7 @@ pub struct NewickImporter<R> {
 }
 
 impl<R: std::io::Read> NewickImporter<R> {
-    pub fn from_reader(reader:R)->Self{
+    pub fn from_reader(reader: R) -> Self {
         NewickImporter {
             last_byte: None,
             //TODO better cleaner api through new.
@@ -43,29 +44,6 @@ impl<R: std::io::Read> NewickImporter<R> {
         };
 
         parser.read_next_tree()
-    }
-    fn read_next_tree(&mut self) -> Result<MutableTree> {
-        let start = std::time::Instant::now();
-        self.tree = Some(MutableTree::new());
-        self.skip_until(b'(')?;
-        self.unread_byte(b'(');
-
-        let root = self.read_internal_node()?;
-        //TODO hide node/node ref api
-        self.get_tree().set_root(Some(root));
-        self.get_tree().branchlengths_known = true;
-
-        match self.last_deliminator {
-            b')' => Err(IoError::OTHER),
-            b';' => {
-                trace!(
-                    "Tree parsed in {} milli seconds ",
-                    start.elapsed().as_millis()
-                );
-                Ok(self.tree.take().unwrap())
-            }
-            _ => Err(IoError::OTHER)
-        }
     }
     fn read_internal_node(&mut self) -> Result<TreeIndex> {
         let token = self.read_byte()?;
@@ -183,7 +161,7 @@ impl<R: std::io::Read> NewickImporter<R> {
                 space = 0;
             } else if ch == b'[' {
                 self.skip_comments(ch)?;
-                self.last_deliminator=b' ';
+                self.last_deliminator = b' ';
                 done = true
             } else {
                 if quoted {
@@ -260,17 +238,17 @@ impl<R: std::io::Read> NewickImporter<R> {
     }
     fn skip_comments(&mut self, c: Byte) -> Result<()> {
         let mut comment = String::from(char::from(c));
-        let mut comment_depth =1;
-        while comment_depth>0{
+        let mut comment_depth = 1;
+        while comment_depth > 0 {
             let ch = self.read()?;
-            if ch==b'['{
-                comment_depth+=1;
-            }else if ch==b']'{
-                comment_depth-=1;
+            if ch == b'[' {
+                comment_depth += 1;
+            } else if ch == b']' {
+                comment_depth -= 1;
             }
             comment.push(char::from(ch));
         }
-        debug!("Comment: {}",comment);
+        debug!("Comment: {}", comment);
         if let Ok(annotation) = AnnotationParser::parse_annotation(comment.as_str()) {
             self.last_annotation = Some(annotation);
             Ok(())
@@ -299,30 +277,55 @@ impl<R: std::io::Read> NewickImporter<R> {
     fn get_tree(&mut self) -> &mut MutableTree {
         self.tree.as_mut().unwrap()
     }
-    fn has_tree(&mut self) -> bool {
-       match self.skip_until(b'('){
-            Ok(_Byte)=>{
-                self.unread_byte(b'(');
-                true
-            },
-           Err(IoError::EOF)=>false,
-           Err(e)=>panic!("parsing error: {}",e)
-       }
-
-    }
 }
 
 impl<R: std::io::Read> Iterator for NewickImporter<R> {
     type Item = MutableTree;
     fn next(&mut self) -> Option<Self::Item> {
         if self.has_tree() {
-         let tree = self.read_next_tree();
+            let tree = self.read_next_tree();
             match tree {
                 Ok(node) => Some(node),
                 Err(e) => panic!("parsing error {}", e),
             }
         } else {
             None
+        }
+    }
+}
+
+impl<R: std::io::Read> TreeImporter<R> for NewickImporter<R> {
+    fn has_tree(&mut self) -> bool {
+        match self.skip_until(b'(') {
+            Ok(_Byte) => {
+                self.unread_byte(b'(');
+                true
+            }
+            Err(IoError::EOF) => false,
+            Err(e) => panic!("parsing error: {}", e)
+        }
+    }
+    fn read_next_tree(&mut self) -> Result<MutableTree> {
+        let start = std::time::Instant::now();
+        self.tree = Some(MutableTree::new());
+        self.skip_until(b'(')?;
+        self.unread_byte(b'(');
+
+        let root = self.read_internal_node()?;
+        //TODO hide node/node ref api
+        self.get_tree().set_root(Some(root));
+        self.get_tree().branchlengths_known = true;
+
+        match self.last_deliminator {
+            b')' => Err(IoError::OTHER),
+            b';' => {
+                trace!(
+                    "Tree parsed in {} milli seconds ",
+                    start.elapsed().as_millis()
+                );
+                Ok(self.tree.take().unwrap())
+            }
+            _ => Err(IoError::OTHER)
         }
     }
 }
@@ -336,7 +339,7 @@ mod tests {
         let tree = NewickImporter::read_tree(BufReader::new("(a:1,b:4)l;".as_bytes())).unwrap();
         let root = tree.get_root().unwrap();
         let label = tree.get_label(root).unwrap();
-        assert_eq!( label,"l");
+        assert_eq!(label, "l");
         let mut names = vec![];
         for child in tree.get_children(root).iter() {
             if let Some(t) = tree.get_taxon(*child) {
@@ -354,7 +357,7 @@ mod tests {
                 bl.push(t)
             }
         }
-        assert_eq!(bl, vec![ 1.0, 4.0]);
+        assert_eq!(bl, vec![1.0, 4.0]);
     }
 
     #[test]
@@ -375,13 +378,14 @@ mod tests {
 
     #[test]
     fn quoted() {
-        assert!(true, NewickImporter::read_tree(BufReader::new( "('234] ':1,'here a *':1);".as_bytes())).is_ok());
+        assert!(true, NewickImporter::read_tree(BufReader::new("('234] ':1,'here a *':1);".as_bytes())).is_ok());
     }
 
     #[test]
     fn comment() {
         assert!(NewickImporter::read_tree(BufReader::new("(a[&test=ok],b:1);".as_bytes())).is_ok());
     }
+
     #[test]
     fn double_comment() {
         assert!(NewickImporter::read_tree(BufReader::new("(a[&test=ok,value=0.9],b:1);".as_bytes())).is_ok());

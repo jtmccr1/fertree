@@ -21,27 +21,29 @@ pub(crate) mod clades {
     use rand::seq::SliceRandom;
     use std::error::Error;
     use std::io::Write;
+    use rebl::io::parser::tree_importer::TreeImporter;
 
     #[derive(Debug, StructOpt)]
-    pub struct SharedOptions{
+    pub struct SharedOptions {
         #[structopt(short, long, help = "annotation key we are collapsing by. must be discrete")]
         annotation: String,
         #[structopt(short, long, help = "annotation value we are collapsing by")]
         value: String,
     }
+
     #[derive(Debug, StructOpt)]
     pub enum SubCommands {
         /// annotate tips with unique clade key based on annotation
-        Label{
+        Label {
             #[structopt(short, long, help = "prefix for output annotation, if not provided defaults to 'annotation_value.' - Not implemented")]
-            prefix:Option<String>,
+            prefix: Option<String>,
             #[structopt(short, long, help = "annotation key we are collapsing by. must be discrete")]
             annotation: String,
             #[structopt(short, long, help = "annotation value we are collapsing by")]
             value: String,
         },
         /// Collapse monophyletic clades
-        Collapse{
+        Collapse {
             #[structopt(short, long, help = "annotation key we are collapsing by. must be discrete")]
             annotation: String,
             #[structopt(short, long, help = "annotation value we are collapsing by")]
@@ -52,33 +54,29 @@ pub(crate) mod clades {
     }
 
 
-
     //TODO set random seed.
-    pub fn run<R:std::io::Read>(
-        trees: newick_importer::NewickImporter<R>,
-       cmd:SubCommands) -> Result<(), Box<dyn Error>> {
-
-
+    pub fn run<R:std::io::Read,T: TreeImporter<R>>(mut trees: T,
+        cmd: SubCommands) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
-        for mut tree in trees {
-            match cmd {
-                SubCommands::Collapse{ref annotation,ref value, min_size}=> {
 
+        while trees.has_tree(){
+            let mut tree = trees.read_next_tree()?;
+            match cmd {
+                SubCommands::Collapse { ref annotation, ref value, min_size } => {
                     let new_tree = collapse_uniform_clades(&mut tree, &annotation, &value, min_size);
                     writeln!(handle, "{}", new_tree)?;
-                },
-                SubCommands::Label{ref annotation,ref value,ref prefix}=>{
+                }
+                SubCommands::Label { ref annotation, ref value, ref prefix } => {
                     annotate_uniform_clades(&mut tree, &annotation, &value, &prefix);
                     writeln!(handle, "{}", tree)?;
-                } ,
-
+                }
             }
         }
         Ok(())
     }
 
-    pub fn collapse_uniform_clades(tree: &mut MutableTree,key: &str, value: &str, min_size: usize) -> MutableTree {
+    pub fn collapse_uniform_clades(tree: &mut MutableTree, key: &str, value: &str, min_size: usize) -> MutableTree {
         tree.calc_node_heights();
 
         let mut taxa: HashSet<String> = tree
@@ -108,28 +106,24 @@ pub(crate) mod clades {
         MutableTree::from_tree(tree, &taxa)
     }
 
-    fn annotate_uniform_clades(tree:&mut MutableTree,key:&str,value:&str,prefix:&Option<String>){
-
+    fn annotate_uniform_clades(tree: &mut MutableTree, key: &str, value: &str, prefix: &Option<String>) {
         let monophyletic_groups =
             get_monophyletic_groups(tree, tree.get_root().unwrap(), key, value);
         if monophyletic_groups.0 {
             warn!("The whole tree is a monophyletic clade!")
         }
-        let pre = if let Some(s)=prefix{
+        let pre = if let Some(s) = prefix {
             s.clone()
-        }else{"".to_string()};
-        let mut counter=0;
+        } else { "".to_string() };
+        let mut counter = 0;
         for group in monophyletic_groups.1.iter() {
-
-            if group.len()>1 {
+            if group.len() > 1 {
                 for node in group {
-                    tree.annotate_node(*node, String::from("Clade"), AnnotationValue::Discrete(format!("{}_{}.{}",pre, value, counter)));
+                    tree.annotate_node(*node, String::from("Clade"), AnnotationValue::Discrete(format!("{}_{}.{}", pre, value, counter)));
                 }
                 counter += 1;
             }
         }
-
-
     }
 
     fn get_monophyletic_groups(
@@ -203,15 +197,16 @@ pub(crate) mod annotate {
 
     use csv::Reader;
     use std::fs::File;
+    use rebl::io::parser::tree_importer::TreeImporter;
 
-    pub fn run<R:std::io::Read>(
-        trees: newick_importer::NewickImporter<R>,
+    pub fn run<R:std::io::Read,T: TreeImporter<R>>(mut trees: T,
         traits: path::PathBuf,
     ) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
 
-        for mut tree in trees {
+        while trees.has_tree() {
+            let mut tree = trees.read_next_tree()?;
             //TODO avoid parsing at each loop
             let mut reader = command_io::parse_tsv(&traits)?;
             annotate_tips(&mut tree, &mut reader)?;
@@ -257,6 +252,7 @@ pub mod extract {
 
     use rebl::tree::AnnotationValue;
     use std::io::Write;
+    use rebl::io::parser::tree_importer::TreeImporter;
 
     #[derive(Debug, StructOpt)]
     pub enum SubCommands {
@@ -266,8 +262,7 @@ pub mod extract {
         Annotations,
     }
 
-    pub fn run<R:std::io::Read>(
-        trees: newick_importer::NewickImporter<R>,
+    pub fn run<R:std::io::Read,T: TreeImporter<R>>(mut trees: T,
         cmd: SubCommands,
     ) -> Result<(), Box<dyn Error>> {
         match cmd {
@@ -276,10 +271,11 @@ pub mod extract {
         }
     }
 
-    fn taxa<R:std::io::Read>(trees: newick_importer::NewickImporter<R>) -> Result<(), Box<dyn Error>> {
+    fn taxa<R:std::io::Read,T: TreeImporter<R>>(mut trees: T) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
-        for tree in trees {
+        while trees.has_tree() {
+            let mut tree = trees.read_next_tree()?;
             let mut i = 0;
             while i < tree.get_external_node_count() {
                 if let Some(tip) = tree.get_external_node(i) {
@@ -293,10 +289,11 @@ pub mod extract {
         Ok(())
     }
 
-    fn annotations<R:std::io::Read>(trees: newick_importer::NewickImporter<R>) -> Result<(), Box<dyn Error>> {
+    fn annotations<R:std::io::Read,T: TreeImporter<R>>(mut trees: T) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
-        for tree in trees {
+        while trees.has_tree() {
+            let mut tree = trees.read_next_tree()?;
             let header = tree
                 .annotation_type
                 .keys()
@@ -336,6 +333,7 @@ pub mod split {
     use std::collections::HashSet;
     use std::error::Error;
     use std::io::Write;
+    use rebl::io::parser::tree_importer::TreeImporter;
 
     #[derive(Debug, PartialEq)]
     struct Subtree {
@@ -433,8 +431,7 @@ pub mod split {
         }
     }
 
-    pub fn run<R:std::io::Read>(
-        trees: newick_importer::NewickImporter<R>,
+    pub fn run<R:std::io::Read,T: TreeImporter<R>>(mut trees: T,
         min_clade_size: Option<usize>,
         explore: bool,
         strict: bool,
@@ -445,7 +442,8 @@ pub mod split {
         if explore && min_clade_size.is_some() {
             warn!("Because explore is set. No trees will be written");
         }
-        for mut starting_tree in trees {
+        while trees.has_tree() {
+            let mut starting_tree = trees.read_next_tree()?;
             starting_tree.calc_node_heights();
             trace!("starting to split");
             let mut searcher = SubtreeSearcher {
@@ -511,18 +509,20 @@ pub(crate) mod stats {
     use std::error::Error;
     use std::io::Write;
     use structopt::StructOpt;
+    use rebl::io::parser::tree_importer::TreeImporter;
 
     #[derive(Debug, StructOpt)]
     pub enum SubCommands {
         Tips,
     }
 
-    fn general_stats<R:std::io::Read>(trees: newick_importer::NewickImporter<R>) -> Result<(), Box<dyn Error>> {
+    fn general_stats<R:std::io::Read,T: TreeImporter<R>>(mut trees: T) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
         writeln!(handle, "nodes\ttips\trootHeight\tsumbl\tmeanbl")?;
 
-        for mut tree in trees {
+        while trees.has_tree() {
+            let mut tree = trees.read_next_tree()?;
             let root = tree.get_root().unwrap();
             let nodes = tree.get_node_count();
             // let internal = tree.get_internal_node_count();
@@ -551,8 +551,8 @@ pub(crate) mod stats {
         Ok(())
     }
 
-    pub fn run<R:std::io::Read>(
-        trees: newick_importer::TreeImporter,
+    pub fn run<R:std::io::Read,T: TreeImporter<R>>(
+        trees: T,
         cmd: Option<SubCommands>,
     ) -> Result<(), Box<dyn Error>> {
         //TODO move tree reading and output buffer handling out here and pass to commands
@@ -575,6 +575,7 @@ pub mod resolve {
     use std::error::Error;
     use std::io::Write;
     use structopt::StructOpt;
+    use rebl::io::parser::tree_importer::TreeImporter;
 
     #[derive(Debug, StructOpt)]
     pub enum SubCommands {
@@ -589,13 +590,13 @@ pub mod resolve {
         tips: Vec<TreeIndex>,
     }
 
-    pub fn run<R:std::io::Read>(
-        trees: newick_importer::NewickImporter<R>,
+    pub fn run<R:std::io::Read,T: TreeImporter<R>>(mut trees: T,
         cmd: SubCommands,
     ) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
-        for mut tree in trees {
+        while trees.has_tree() {
+            let mut tree = trees.read_next_tree()?;
             resolve(&mut tree, &cmd);
             writeln!(handle, "{}", tree)?;
         }
@@ -605,8 +606,8 @@ pub mod resolve {
     // collect all poltyomies and child vectors in a stuct
     // set heights
     fn resolve(tree: &mut MutableTree, cmd: &SubCommands) {
-        match cmd{
-            SubCommands::Evenly=>{
+        match cmd {
+            SubCommands::Evenly => {
                 tree.calc_node_heights();
             }
             _ => {}
@@ -645,7 +646,6 @@ pub mod resolve {
                 );
             }
             SubCommands::Evenly => {
-
                 debug!(
                     "about to set  setting node heights \n heights known : {} - lengths known: {}",
                     tree.heights_known, tree.branchlengths_known
@@ -760,6 +760,7 @@ pub mod resolve {
         use crate::commands::resolve::{resolve, SubCommands};
         use rebl::tree::mutable_tree::MutableTree;
         use rebl::io::parser::newick_parser::NewickParser;
+
         // these just run at the momement. Need a way to compare the clades to ensure they are working
         #[test]
         fn zero() {
@@ -782,18 +783,18 @@ pub mod resolve {
         #[test]
         fn evenly() {
             let tree_string = "((A:1,(B:1,C:1,D:1,a:1):1,E:1):1,F:1,G:1);".as_bytes();
-            let mut tree =NewickParser::parse_string(tree_string).unwrap();
+            let mut tree = NewickParser::parse_string(tree_string).unwrap();
             tree.calc_node_heights();
-            let starting_height=tree.get_height(tree.root.unwrap());
+            let starting_height = tree.get_height(tree.root.unwrap());
             resolve(&mut tree, &SubCommands::Evenly);
             println!("{}", tree.to_string());
 
             assert_eq!(starting_height, tree.get_height(tree.root.unwrap()));
         }
 
-        fn polytomy(){
+        fn polytomy() {
             let tree_string = "((A:1,(B:1,C:1,D:1,a:1):1,E:1):1,F:1,G:1);".as_bytes();
-            let mut tree =NewickParser::parse_string(tree_string).unwrap();
+            let mut tree = NewickParser::parse_string(tree_string).unwrap();
         }
     }
 }
