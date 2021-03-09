@@ -12,7 +12,6 @@
 
 
 pub(crate) mod clades {
-    use rebl::io::parser::newick_importer;
     use rebl::tree::mutable_tree::{MutableTree, TreeIndex};
     use rebl::tree::AnnotationValue;
     use std::collections::HashSet;
@@ -55,12 +54,12 @@ pub(crate) mod clades {
 
 
     //TODO set random seed.
-    pub fn run<R:std::io::Read,T: TreeImporter<R>>(mut trees: T,
-        cmd: SubCommands) -> Result<(), Box<dyn Error>> {
+    pub fn run<R: std::io::Read, T: TreeImporter<R>>(mut trees: T,
+                                                     cmd: SubCommands) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
 
-        while trees.has_tree(){
+        while trees.has_tree() {
             let mut tree = trees.read_next_tree()?;
             match cmd {
                 SubCommands::Collapse { ref annotation, ref value, min_size } => {
@@ -187,7 +186,7 @@ pub(crate) mod clades {
 
 pub(crate) mod annotate {
     use super::command_io;
-    use rebl::io::parser::newick_importer;
+
     use rebl::tree::mutable_tree::MutableTree;
     use rebl::tree::AnnotationValue;
     use std::collections::HashMap;
@@ -199,8 +198,8 @@ pub(crate) mod annotate {
     use std::fs::File;
     use rebl::io::parser::tree_importer::TreeImporter;
 
-    pub fn run<R:std::io::Read,T: TreeImporter<R>>(mut trees: T,
-        traits: path::PathBuf,
+    pub fn run<R: std::io::Read, T: TreeImporter<R>>(mut trees: T,
+                                                     traits: path::PathBuf,
     ) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
@@ -246,7 +245,6 @@ pub(crate) mod annotate {
 }
 
 pub mod extract {
-    use rebl::io::parser::newick_importer;
     use std::error::Error;
     use structopt::StructOpt;
 
@@ -262,8 +260,8 @@ pub mod extract {
         Annotations,
     }
 
-    pub fn run<R:std::io::Read,T: TreeImporter<R>>(mut trees: T,
-        cmd: SubCommands,
+    pub fn run<R: std::io::Read, T: TreeImporter<R>>(trees: T,
+                                                     cmd: SubCommands,
     ) -> Result<(), Box<dyn Error>> {
         match cmd {
             SubCommands::Taxa => taxa(trees),
@@ -271,11 +269,11 @@ pub mod extract {
         }
     }
 
-    fn taxa<R:std::io::Read,T: TreeImporter<R>>(mut trees: T) -> Result<(), Box<dyn Error>> {
+    fn taxa<R: std::io::Read, T: TreeImporter<R>>(mut trees: T) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
         while trees.has_tree() {
-            let mut tree = trees.read_next_tree()?;
+            let tree = trees.read_next_tree()?;
             let mut i = 0;
             while i < tree.get_external_node_count() {
                 if let Some(tip) = tree.get_external_node(i) {
@@ -289,11 +287,11 @@ pub mod extract {
         Ok(())
     }
 
-    fn annotations<R:std::io::Read,T: TreeImporter<R>>(mut trees: T) -> Result<(), Box<dyn Error>> {
+    fn annotations<R: std::io::Read, T: TreeImporter<R>>(mut trees: T) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
         while trees.has_tree() {
-            let mut tree = trees.read_next_tree()?;
+            let tree = trees.read_next_tree()?;
             let header = tree
                 .annotation_type
                 .keys()
@@ -328,7 +326,6 @@ pub mod extract {
 }
 
 pub mod split {
-    use rebl::io::parser::newick_importer;
     use rebl::tree::mutable_tree::{MutableTree, TreeIndex};
     use std::collections::HashSet;
     use std::error::Error;
@@ -431,10 +428,10 @@ pub mod split {
         }
     }
 
-    pub fn run<R:std::io::Read,T: TreeImporter<R>>(mut trees: T,
-        min_clade_size: Option<usize>,
-        explore: bool,
-        strict: bool,
+    pub fn run<R: std::io::Read, T: TreeImporter<R>>(mut trees: T,
+                                                     min_clade_size: Option<usize>,
+                                                     explore: bool,
+                                                     strict: bool,
     ) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
@@ -505,7 +502,6 @@ pub mod split {
 }
 
 pub(crate) mod stats {
-    use rebl::io::parser::newick_importer;
     use std::error::Error;
     use std::io::Write;
     use structopt::StructOpt;
@@ -516,7 +512,7 @@ pub(crate) mod stats {
         Tips,
     }
 
-    fn general_stats<R:std::io::Read,T: TreeImporter<R>>(mut trees: T) -> Result<(), Box<dyn Error>> {
+    fn general_stats<R: std::io::Read, T: TreeImporter<R>>(mut trees: T) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
         writeln!(handle, "nodes\ttips\trootHeight\tsumbl\tmeanbl")?;
@@ -551,7 +547,7 @@ pub(crate) mod stats {
         Ok(())
     }
 
-    pub fn run<R:std::io::Read,T: TreeImporter<R>>(
+    pub fn run<R: std::io::Read, T: TreeImporter<R>>(
         trees: T,
         cmd: Option<SubCommands>,
     ) -> Result<(), Box<dyn Error>> {
@@ -570,7 +566,6 @@ pub(crate) mod stats {
 
 pub mod resolve {
     use rand::{thread_rng, Rng};
-    use rebl::io::parser::newick_importer;
     use rebl::tree::mutable_tree::{MutableTree, TreeIndex};
     use std::error::Error;
     use std::io::Write;
@@ -590,8 +585,8 @@ pub mod resolve {
         tips: Vec<TreeIndex>,
     }
 
-    pub fn run<R:std::io::Read,T: TreeImporter<R>>(mut trees: T,
-        cmd: SubCommands,
+    pub fn run<R: std::io::Read, T: TreeImporter<R>>(mut trees: T,
+                                                     cmd: SubCommands,
     ) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
@@ -606,17 +601,14 @@ pub mod resolve {
     // collect all poltyomies and child vectors in a stuct
     // set heights
     fn resolve(tree: &mut MutableTree, cmd: &SubCommands) {
-        match cmd {
-            SubCommands::Evenly => {
-                tree.calc_node_heights();
-            }
-            _ => {}
+        if let SubCommands::Evenly = cmd {
+            tree.calc_node_heights();
         }
         let mut polytomies = tree.preorder_iter()
             .filter(|node| !tree.is_external(*node))
             .map(|n| (n, tree.get_children(n)))
             .filter(|(_n, kids)| kids.len() > 2)
-            .map(|(root, tips)| Polytomy { root: root, tips })
+            .map(|(root, tips)| Polytomy { root, tips })
             .collect::<Vec<Polytomy>>();
         let node_count = tree.get_node_count();
         info!("{} polytomies found", polytomies.len());
@@ -758,14 +750,14 @@ pub mod resolve {
     #[cfg(test)]
     mod tests {
         use crate::commands::resolve::{resolve, SubCommands};
-        use rebl::tree::mutable_tree::MutableTree;
-        use rebl::io::parser::newick_parser::NewickParser;
+        use rebl::io::parser::newick_importer::NewickImporter;
+        use std::io::BufReader;
 
         // these just run at the momement. Need a way to compare the clades to ensure they are working
         #[test]
         fn zero() {
             let tree_string = "((A:1,(B:1,C:1,D:1):1,E:1):1,F:1,G:1);";
-            let mut tree = NewickParser::parse_string(tree_string.as_bytes()).unwrap();
+            let mut tree = NewickImporter::read_tree(BufReader::new(tree_string.as_bytes())).unwrap();
             println!("{}", tree.branchlengths_known);
             resolve(&mut tree, &SubCommands::Zero);
             println!("{}", tree.branchlengths_known);
@@ -782,8 +774,8 @@ pub mod resolve {
 
         #[test]
         fn evenly() {
-            let tree_string = "((A:1,(B:1,C:1,D:1,a:1):1,E:1):1,F:1,G:1);".as_bytes();
-            let mut tree = NewickParser::parse_string(tree_string).unwrap();
+            let tree_string = "((A:1,(B:1,C:1,D:1,a:1):1,E:1):1,F:1,G:1);";
+            let mut tree = NewickImporter::read_tree(BufReader::new(tree_string.as_bytes())).unwrap();
             tree.calc_node_heights();
             let starting_height = tree.get_height(tree.root.unwrap());
             resolve(&mut tree, &SubCommands::Evenly);
@@ -792,10 +784,6 @@ pub mod resolve {
             assert_eq!(starting_height, tree.get_height(tree.root.unwrap()));
         }
 
-        fn polytomy() {
-            let tree_string = "((A:1,(B:1,C:1,D:1,a:1):1,E:1):1,F:1,G:1);".as_bytes();
-            let mut tree = NewickParser::parse_string(tree_string).unwrap();
-        }
     }
 }
 

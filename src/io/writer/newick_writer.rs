@@ -88,7 +88,6 @@ pub fn write_annotation(key: &str, value: Option<&AnnotationValue>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::io::parser::newick_parser::NewickParser;
     use crate::tree::fixed_tree::FixedNode;
     use crate::tree::mutable_tree::MutableTree;
     use crate::io::parser::newick_importer::NewickImporter;
@@ -118,6 +117,7 @@ mod tests {
         let tree = NewickImporter::read_tree(BufReader::new(s.as_bytes())).expect("error in parsing");
         assert_eq!( tree.to_string(),s)
     }
+    #[test]
     fn tree_with_unquoted_annotations() {
         let s = "((A[&location=UK]:0.3,B[&location=USA]:0.05):0.9,C[&location=US]:0.1);";
         let tree = NewickImporter::read_tree(BufReader::new(s.as_bytes())).expect("error in parsing");

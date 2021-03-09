@@ -50,12 +50,18 @@ pub struct MutableTree {
     pub root: Option<TreeIndex>,
     pub heights_known: bool,
     pub branchlengths_known: bool,
-    pub id:Option<String>,
-    pub tree_annotation:HashMap<String, AnnotationValue>
+    pub id: Option<String>,
+    pub tree_annotation: HashMap<String, AnnotationValue>,
+}
+
+impl Default for MutableTree {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MutableTree {
-    pub fn new()->Self{
+    pub fn new() -> Self {
         MutableTree {
             nodes: vec![],
             external_nodes: vec![],
@@ -65,13 +71,13 @@ impl MutableTree {
             root: None,
             heights_known: false,
             branchlengths_known: false,
-            id:None,
-            tree_annotation:HashMap::new(),
+            id: None,
+            tree_annotation: HashMap::new(),
         }
     }
     pub fn from_fixed_node(root: FixedNode) -> Self {
         let mut tree = MutableTree::new();
-        tree.branchlengths_known=true;
+        tree.branchlengths_known = true;
         tree.fixed_node_helper(root, None);
         tree.set_root(Some(0));
         tree.calc_node_heights();
@@ -143,6 +149,7 @@ impl MutableTree {
             if let Some(taxon) = &tree.get_unwrapped_node(node).taxon {
                 new_node = self.make_external_node(taxon, Some(&taxa));
             }
+            new_node
         } else {
             let nchildren = tree.get_num_children(node);
             let mut children: Vec<usize> = vec![];
@@ -161,23 +168,23 @@ impl MutableTree {
             }
             if children.len() > 1 {
                 new_node = Some(self.make_root_node(children));
+                self.set_height(
+                    new_node.unwrap(),
+                    tree.get_height(node)
+                        .expect("found a node without a height"),
+                );
+                // copy annotations
+                let annotation_map = &tree.get_unwrapped_node(node).annotations;
+                for (key, value) in annotation_map.iter() {
+                    self.annotate_node(new_node.unwrap(), key.clone(), value.clone());
+                }
+                new_node
             } else if children.len() == 1 {
-                return Some(children.remove(0));
+                Some(children[0])
+            } else {
+                None //TODO should never hit this would be caught above in AHHHH
             }
         }
-        if let Some(new_node_i) = new_node {
-            self.set_height(
-                new_node_i,
-                tree.get_height(node)
-                    .expect("found a node without a height"),
-            );
-            // copy annotations
-            let annotation_map = &tree.get_unwrapped_node(node).annotations;
-            for (key, value) in annotation_map.iter() {
-                self.annotate_node(new_node_i, key.clone(), value.clone());
-            }
-        }
-        new_node
     }
     pub fn get_height(&self, node: TreeIndex) -> Option<f64> {
         if let Some(height) = self.get_unwrapped_node(node).height {
@@ -189,14 +196,14 @@ impl MutableTree {
     pub fn get_node_label(&self, node: TreeIndex) -> &Option<String> {
         &self.get_unwrapped_node(node).label
     }
-    fn get_height_safely(&mut self, node: TreeIndex) -> f64 {
-        if !self.heights_known {
-            self.calc_node_heights();
-        }
-        self.get_unwrapped_node(node)
-            .height
-            .expect("how did it come to this. I thought heights were trust worthy")
-    }
+    // fn get_height_safely(&mut self, node: TreeIndex) -> f64 {
+    //     if !self.heights_known {
+    //         self.calc_node_heights();
+    //     }
+    //     self.get_unwrapped_node(node)
+    //         .height
+    //         .expect("how did it come to this. I thought heights were trust worthy")
+    // }
     //TODO clean up bl/h knowledge;
     pub fn calc_node_heights(&mut self) {
         if !self.heights_known {
@@ -260,8 +267,8 @@ impl MutableTree {
         self.branchlengths_known = false;
     }
 
-    pub  fn make_external_node(&mut self, taxon: &str, taxa_set: Option<&HashSet<String>>) -> Option<TreeIndex> {
-        if let  Some(taxa) = taxa_set{
+    pub fn make_external_node(&mut self, taxon: &str, taxa_set: Option<&HashSet<String>>) -> Option<TreeIndex> {
+        if let Some(taxa) = taxa_set {
             if taxa.contains(taxon) {
                 let index = self.nodes.len();
                 let new_node = MutableTreeNode::new(Some(taxon.to_string()), index);
@@ -273,7 +280,7 @@ impl MutableTree {
             } else {
                 None
             }
-        }else{
+        } else {
             let index = self.nodes.len();
             let new_node = MutableTreeNode::new(Some(taxon.to_string()), index);
             self.nodes.push(new_node);
@@ -282,7 +289,6 @@ impl MutableTree {
 
             Some(index)
         }
-
     }
     /// Make and return an internal node. Provided children will be added to the node in
     /// the order they appear in the input vector;
@@ -562,12 +568,11 @@ impl MutableTree {
 
     pub fn get_label(&self, index: TreeIndex) -> Option<&str> {
         let node = self.get_unwrapped_node(index);
-        if let Some(label)= &node.label{
+        if let Some(label) = &node.label {
             Some(label.as_str())
-        }else{
+        } else {
             None
         }
-
     }
     pub fn get_taxon_node(&self, taxon: &str) -> Option<usize> {
         if let Some(i) = self.taxon_node_map.get(taxon) {
@@ -577,15 +582,15 @@ impl MutableTree {
         }
     }
 
-    pub fn annotate_tree(&mut self,key: String, value: AnnotationValue){
+    pub fn annotate_tree(&mut self, key: String, value: AnnotationValue) {
         self.tree_annotation.insert(key, value);
     }
-    pub fn get_tree_annnotation(&mut self,key: &str)->Option<&AnnotationValue>{
+    pub fn get_tree_annnotation(&mut self, key: &str) -> Option<&AnnotationValue> {
         self.tree_annotation.get(key)
     }
 
     pub fn set_id(&mut self, id: String) {
-        self.id=Some(id);
+        self.id = Some(id);
     }
 }
 //TODO I don't like that this is not lazy

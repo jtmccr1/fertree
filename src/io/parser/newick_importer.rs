@@ -1,10 +1,5 @@
-use super::newick_parser::NewickParser;
 use crate::tree::mutable_tree::{MutableTree, TreeIndex};
-use std::error::Error;
-use std::fs::File;
-use std::io;
-use std::io::{BufRead, Read, BufReader};
-use std::path::PathBuf;
+use std::io::{Read, BufReader};
 use crate::io::error::{IoError};
 use std::collections::HashMap;
 use crate::tree::AnnotationValue;
@@ -46,7 +41,7 @@ impl<R: std::io::Read> NewickImporter<R> {
         parser.read_next_tree()
     }
     fn read_internal_node(&mut self) -> Result<TreeIndex> {
-        let token = self.read_byte()?;
+        self.read_byte()?;
         //assert =='('
         let mut children = vec![];
         children.push(self.read_branch()?);
@@ -131,8 +126,6 @@ impl<R: std::io::Read> NewickImporter<R> {
     fn read_token(&mut self, deliminator: &str) -> Result<String> {
         let delims = deliminator.bytes().collect::<Vec<Byte>>();
         let mut space = 0;
-        let mut ch = b'\0';
-        let mut ch2 = b'\0';
         let mut quote_char = b'\0';
 
         let mut done = false;
@@ -142,10 +135,10 @@ impl<R: std::io::Read> NewickImporter<R> {
         self.next_byte()?;
         let mut token = String::new();
         while !done {
-            ch = self.read()?;
+            let mut ch = self.read()?;
             let is_space = char::from(ch).is_whitespace();
             if quoted && ch == quote_char {
-                ch2 = self.read()?;
+                let ch2 = self.read()?;
                 if ch == ch2 {
                     token.push(char::from(ch));
                 } else {
@@ -163,31 +156,29 @@ impl<R: std::io::Read> NewickImporter<R> {
                 self.skip_comments(ch)?;
                 self.last_deliminator = b' ';
                 done = true
-            } else {
-                if quoted {
-                    if is_space {
-                        space += 1;
-                        ch = b' ';
-                    } else {
-                        space = 0;
-                    }
-                    if space < 2 {
-                        token.push(char::from(ch));
-                    }
-                } else if is_space {
-                    self.last_deliminator = b' ';
-                    done = true;
-                } else if delims.contains(&ch) {
-                    done = true;
-                    self.last_deliminator = ch;
+            } else if quoted {
+                if is_space {
+                    space += 1;
+                    ch = b' ';
                 } else {
-                    token.push(char::from(ch));
-                    first = false;
+                    space = 0;
                 }
+                if space < 2 {
+                    token.push(char::from(ch));
+                }
+            } else if is_space {
+                self.last_deliminator = b' ';
+                done = true;
+            } else if delims.contains(&ch) {
+                done = true;
+                self.last_deliminator = ch;
+            } else {
+                token.push(char::from(ch));
+                first = false;
             }
         }
         if char::from(self.last_deliminator).is_whitespace() {
-            ch = self.next_byte()?;
+            let mut ch = self.next_byte()?;
             while char::from(ch).is_whitespace() {
                 self.read()?;
                 ch = self.next_byte()?;
@@ -207,7 +198,7 @@ impl<R: std::io::Read> NewickImporter<R> {
 
         match s.parse() {
             Ok(l) => Ok(l),
-            Err(e) => Err(IoError::OTHER)
+            Err(e) => panic!("{}", e)
         }
     }
 
@@ -265,11 +256,11 @@ impl<R: std::io::Read> NewickImporter<R> {
         Ok(ch)
     }
 
-    fn annotation_node(&mut self, nodeRef: TreeIndex) {
+    fn annotation_node(&mut self, node_ref: TreeIndex) {
         if self.last_annotation.is_some() {
             let annotation_map = self.last_annotation.take().unwrap();
             for (key, value) in annotation_map.into_iter() {
-                self.get_tree().annotate_node(nodeRef, key, value);
+                self.get_tree().annotate_node(node_ref, key, value);
             }
         }
     }
@@ -297,7 +288,7 @@ impl<R: std::io::Read> Iterator for NewickImporter<R> {
 impl<R: std::io::Read> TreeImporter<R> for NewickImporter<R> {
     fn has_tree(&mut self) -> bool {
         match self.skip_until(b'(') {
-            Ok(_Byte) => {
+            Ok(_byte) => {
                 self.unread_byte(b'(');
                 true
             }

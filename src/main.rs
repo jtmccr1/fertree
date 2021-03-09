@@ -6,7 +6,7 @@ use std::{io, path};
 use structopt::StructOpt;
 use std::fs::File;
 use rebl::io::parser::tree_importer::TreeImporter;
-use std::io::{Read, StdinLock};
+use std::io::{StdinLock};
 use std::error::Error;
 use rebl::io::parser::{nexus_importer, newick_importer};
 use rebl::io::parser::nexus_importer::NexusImporter;

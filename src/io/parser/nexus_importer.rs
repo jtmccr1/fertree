@@ -4,7 +4,6 @@ use std::collections::{HashMap, HashSet};
 use crate::tree::AnnotationValue;
 use crate::io::error::IoError;
 use crate::io::parser::annotation_parser::AnnotationParser;
-use serde::de::value::StrDeserializer;
 use crate::io::parser::tree_importer::TreeImporter;
 
 type Byte = u8;
@@ -63,7 +62,7 @@ impl<R: std::io::Read> NexusImporter<R> {
             match block {
                 Ok(NexusBlock::TAXA) => self.read_taxa_block()?,
                 Ok(NexusBlock::TREES) => {
-                    self.read_translation_list();
+                    self.read_translation_list()?;
                     self.reading_trees = true;
                     break;
                 }
@@ -93,15 +92,15 @@ impl<R: std::io::Read> NexusImporter<R> {
             Err(IoError::FORMAT("unsupported nexus block ".to_string() + &*block))
         }
     }
-    fn find_end_block(&mut self) -> Result<()> {
-        loop {
-            let token = self.read_token(";")?;
-            if token.eq_ignore_ascii_case("end") || token.eq_ignore_ascii_case("endblock") {
-                break;
-            }
-        }
-        Ok(())
-    }
+    // fn find_end_block(&mut self) -> Result<()> {
+    //     loop {
+    //         let token = self.read_token(";")?;
+    //         if token.eq_ignore_ascii_case("end") || token.eq_ignore_ascii_case("endblock") {
+    //             break;
+    //         }
+    //     }
+    //     Ok(())
+    // }
     fn read_taxa_block(&mut self) -> Result<()> {
         let mut taxa_count = 0;
         let token = self.read_token("")?;
@@ -117,7 +116,7 @@ impl<R: std::io::Read> NexusImporter<R> {
         if taxalabels.eq_ignore_ascii_case("TAXLABELS") {
             loop {
                 let taxa = self.read_token(";")?.trim().to_string();
-                if taxa.len() > 0 {
+                if !taxa.is_empty() {
                     let uniq = self.taxa.insert(taxa.to_string());
                     if !uniq {
                         panic!("duplicated taxa:".to_string() + &*taxa)
@@ -152,7 +151,7 @@ impl<R: std::io::Read> NexusImporter<R> {
                 }
                 if self.last_deliminator == b';' {
                     //now prep for reading trees that come next
-                    self.read_token(";");
+                    self.read_token(";")?;
                     break Ok(());
                 }
             }
@@ -163,7 +162,7 @@ impl<R: std::io::Read> NexusImporter<R> {
 
 
     fn read_internal_node(&mut self) -> Result<TreeIndex> {
-        let token = self.read_byte()?;
+         self.read_byte()?;
         //assert =='('
         let mut children = vec![];
         children.push(self.read_branch()?);
@@ -248,8 +247,8 @@ impl<R: std::io::Read> NexusImporter<R> {
     fn read_token(&mut self, deliminator: &str) -> Result<String> {
         let delims = deliminator.bytes().collect::<Vec<Byte>>();
         let mut space = 0;
-        let mut ch = b'\0';
-        let mut ch2 = b'\0';
+        // let mut ch = b'\0';
+        // let mut ch2 = b'\0';
         let mut quote_char = b'\0';
 
         let mut done = false;
@@ -259,10 +258,10 @@ impl<R: std::io::Read> NexusImporter<R> {
         self.next_byte()?;
         let mut token = String::new();
         while !done {
-            ch = self.read()?;
+            let mut ch = self.read()?;
             let is_space = char::from(ch).is_whitespace();
             if quoted && ch == quote_char {
-                ch2 = self.read()?;
+                let ch2 = self.read()?;
                 if ch == ch2 {
                     token.push(char::from(ch));
                 } else {
@@ -280,8 +279,7 @@ impl<R: std::io::Read> NexusImporter<R> {
                 self.skip_comments(ch)?;
                 // self.last_deliminator=' ';
                 done = true
-            } else {
-                if quoted {
+            } else if quoted {
                     if is_space {
                         space += 1;
                         ch = b' ';
@@ -301,10 +299,9 @@ impl<R: std::io::Read> NexusImporter<R> {
                     token.push(char::from(ch));
                     first = false;
                 }
-            }
         }
         if char::from(self.last_deliminator).is_whitespace() {
-            ch = self.next_byte()?;
+           let mut ch = self.next_byte()?;
             while char::from(ch).is_whitespace() {
                 self.read()?;
                 ch = self.next_byte()?;
@@ -324,7 +321,7 @@ impl<R: std::io::Read> NexusImporter<R> {
 
         match s.parse() {
             Ok(l) => Ok(l),
-            Err(e) => Err(IoError::OTHER)
+            Err(e) => panic!("{}",e)
         }
     }
     fn read_int(&mut self, deliminator: &str) -> Result<usize> {
@@ -333,7 +330,7 @@ impl<R: std::io::Read> NexusImporter<R> {
 
         match s.parse() {
             Ok(l) => Ok(l),
-            Err(e) => Err(IoError::OTHER)
+            Err(e) => panic!("{}",e)
         }
     }
 
@@ -383,19 +380,19 @@ impl<R: std::io::Read> NexusImporter<R> {
         }
     }
 
-    fn skip_until(&mut self, c: Byte) -> Result<Byte> {
-        let mut ch: Byte = self.read_byte()?;
-        while ch != c {
-            ch = self.read_byte()?;
-        }
-        Ok(ch)
-    }
+    // fn skip_until(&mut self, c: Byte) -> Result<Byte> {
+    //     let mut ch: Byte = self.read_byte()?;
+    //     while ch != c {
+    //         ch = self.read_byte()?;
+    //     }
+    //     Ok(ch)
+    // }
 
-    fn annotation_node(&mut self, nodeRef: TreeIndex) {
+    fn annotation_node(&mut self, node_ref: TreeIndex) {
         if self.last_annotation.is_some() {
             let annotation_map = self.last_annotation.take().unwrap();
             for (key, value) in annotation_map.into_iter() {
-                self.get_tree().annotate_node(nodeRef, key, value);
+                self.get_tree().annotate_node(node_ref, key, value);
             }
         }
     }
@@ -407,21 +404,21 @@ impl<R: std::io::Read> NexusImporter<R> {
 impl<R: std::io::Read> TreeImporter<R> for NexusImporter<R> {
     fn has_tree(&mut self) -> bool {
         if !self.reading_trees {
-            self.prep_for_trees();
+            self.prep_for_trees().expect("Parsing error prior. Never found trees");
         }
          self.reading_trees && self.last_token.eq_ignore_ascii_case("TREE") || self.last_token.eq_ignore_ascii_case("UTREE")
     }
 
     fn read_next_tree(&mut self) -> Result<MutableTree> {
         if !self.reading_trees {
-            self.prep_for_trees();
+            self.prep_for_trees()?;
         }
         if self.last_token.eq_ignore_ascii_case("UTREE") || self.last_token.eq_ignore_ascii_case("TREE") {
             let start = std::time::Instant::now();
             self.tree = Some(MutableTree::new());
             if self.last_byte == Some(b'*') {
                 // Star is used to specify a default tree - ignore it
-                self.read_byte();
+                self.read_byte()?;
             }
 
             let label = self.read_token("=;")?;
@@ -477,7 +474,7 @@ impl<R: std::io::Read> Iterator for NexusImporter<R> {
     type Item = MutableTree;
     fn next(&mut self) -> Option<Self::Item> {
         if !self.reading_trees {
-            self.prep_for_trees();
+            self.prep_for_trees().ok()?;
         };
         match self.reading_trees {
             false => None,
@@ -496,7 +493,6 @@ impl<R: std::io::Read> Iterator for NexusImporter<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Read;
 
     #[test]
     fn test() {
@@ -577,7 +573,7 @@ mod tests {
 
         let trees = NexusImporter::from_reader(nexus.as_bytes());
         let mut correct = false;
-        for mut tree in trees {
+        for tree in trees {
             let root = tree.get_root().unwrap();
             if let Some(AnnotationValue::Discrete(location)) = tree.get_annotation(root, "location") {
                 if location == "UK" {
@@ -608,7 +604,6 @@ mod tests {
         let trees = NexusImporter::from_reader(nexus.as_bytes());
         let mut correct = false;
         for mut tree in trees {
-            let root = tree.get_root().unwrap();
             if let Some(AnnotationValue::Continuous(num)) = tree.get_tree_annnotation("joint") {
                 if num < &2.0 {
                     correct = true;
