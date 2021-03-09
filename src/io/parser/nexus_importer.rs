@@ -5,11 +5,12 @@ use crate::tree::AnnotationValue;
 use crate::io::error::IoError;
 use crate::io::parser::annotation_parser::AnnotationParser;
 use serde::de::value::StrDeserializer;
+use crate::io::parser::tree_importer::TreeImporter;
 
 type Byte = u8;
 type Result<T> = std::result::Result<T, IoError>;
 
-struct NexusImporter<R> {
+pub struct NexusImporter<R> {
     last_token: String,
     last_byte: Option<u8>,
     tree: Option<MutableTree>,
@@ -24,9 +25,8 @@ enum NexusBlock{
     TAXA,
     TREES,
 }
-
 impl<R: std::io::Read> NexusImporter<R> {
-    pub fn from_reader(reader:R)->Self{
+    pub fn from_reader(reader: R) -> Self {
         NexusImporter {
             last_token: "".to_string(),
             last_byte: None,
@@ -39,7 +39,7 @@ impl<R: std::io::Read> NexusImporter<R> {
             reading_trees: false
         }
     }
-    pub fn read_tree(input_reader: BufReader<R>) -> Result<MutableTree> {
+    fn read_tree(input_reader: BufReader<R>) -> Result<MutableTree> {
         let mut parser = NexusImporter {
             last_token: "".to_string(),
             last_byte: None,
@@ -54,8 +54,6 @@ impl<R: std::io::Read> NexusImporter<R> {
 
         parser.read_next_tree()
     }
-
-
     fn prep_for_trees(&mut self) ->Result<()>{
         loop {
             let block = self.find_next_block();
@@ -64,7 +62,7 @@ impl<R: std::io::Read> NexusImporter<R> {
                 Ok(NexusBlock::TREES) => {
                     self.read_translation_list();
                     self.reading_trees = true;
-                   break
+                    break
                 },
                 Err(IoError::EOF)=>break,
                 Err(e)=>{
@@ -108,7 +106,7 @@ impl<R: std::io::Read> NexusImporter<R> {
         if token.eq_ignore_ascii_case("DIMENSIONS") {
             let token2 = self.read_token("=;")?;
             if !token2.eq_ignore_ascii_case("NTAX") {
-               panic!("missing ntax tag".to_string())
+                panic!("missing ntax tag".to_string())
             };
             taxa_count = self.read_int(";")?;
         };
@@ -143,12 +141,12 @@ impl<R: std::io::Read> NexusImporter<R> {
             loop {
                 let key = self.read_token(",;")?;
                 if self.last_deliminator == b',' || self.last_deliminator == b';' {
-                   break Err(IoError::FORMAT("missing taxon label in translate section of trees block".to_string()));
+                    break Err(IoError::FORMAT("missing taxon label in translate section of trees block".to_string()));
                 } else {
                     let taxon = self.read_token(",;")?;
                     //TODO build from Taxa block if needed
                     if let Some(key) = self.taxa_translation.insert(key, taxon) {
-                       break Err(IoError::FORMAT("translate map uses ".to_string() + &key + "twice"))
+                        break Err(IoError::FORMAT("translate map uses ".to_string() + &key + "twice"))
                     }
                 }
                 if self.last_deliminator==b';' {
@@ -182,7 +180,7 @@ impl<R: std::io::Read> NexusImporter<R> {
 
             // ignoring comment that may have been picked up
             if self.last_deliminator != b'=' {
-               panic!("Missing  '=' or label for tree {}", label.as_str())
+                panic!("Missing  '=' or label for tree {}", label.as_str())
             }
 
             if self.next_byte()? != b'(' {
@@ -467,6 +465,7 @@ impl<R: std::io::Read> NexusImporter<R> {
     }
 }
 
+
 impl<R: std::io::Read> Iterator for NexusImporter<R> {
     type Item = MutableTree;
     fn next(&mut self) -> Option<Self::Item> {
@@ -486,6 +485,8 @@ impl<R: std::io::Read> Iterator for NexusImporter<R> {
 
     }
 }
+
+
 
 #[cfg(test)]
 mod tests {

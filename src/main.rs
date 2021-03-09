@@ -2,13 +2,13 @@ mod commands;
 
 use crate::commands::split;
 use commands::{annotate, clades, extract, resolve, stats};
-use rebl::io::parser::newick_importer;
 use std::{io, path};
 use structopt::StructOpt;
 use std::fs::File;
-use rebl::io::parser::newick_importer::NewickImporter;
+use rebl::io::parser::tree_importer::TreeImporter;
 use std::io::Read;
 use std::error::Error;
+use rebl::io::parser::{nexus_importer, newick_importer};
 
 #[macro_use]
 extern crate log;
@@ -100,6 +100,13 @@ pub struct Common {
     global = true
     )]
     infile: Option<path::PathBuf>,
+    #[structopt(
+    short,
+    long,
+    global = true,
+    help = "tree is in nexus format",
+    )]
+    nexus: bool,
     // #[structopt(short, long, parse(from_os_str), help = "output tree file", global = true)]
     // outfile: Option<path::PathBuf>,
     // //TODO implement this log file option
@@ -108,7 +115,6 @@ pub struct Common {
 }
 
 fn main() {
-    //TODO change env variable
     env_logger::init();
     trace!("starting up");
     let args = Cli::from_args();
@@ -118,12 +124,24 @@ fn main() {
     let result = match args.common.infile {
 
         Some(path) => {
-            let ni = newick_importer::NewickImporter::from_reader(File::open(path).expect(&*format!("issue with path ")));
-            run_commands(ni,args.cmd)
+            if args.common.nexus{
+                let import = nexus_importer::NexusImporter::from_reader(File::open(path).expect(&*format!("issue with path ")));
+                run_commands(import,args.cmd)
+            }else{
+                let import = newick_importer::NewickImporter::from_reader(File::open(path).expect(&*format!("issue with path ")));
+                run_commands(import,args.cmd)
+            };
         },
         None => {
-            let ni=newick_importer::NewickImporter::from_reader(stdin.lock());
-            run_commands(ni,args.cmd)
+         if args.common.nexus {
+                let importer = nexus_importer::NexusImporter::from_reader(stdin.lock());
+                run_commands(importer,args.cmd)
+
+            }else{
+               let importer = newick_importer::NewickImporter::from_reader(stdin.lock());
+                run_commands(importer,args.cmd)
+
+            };
         },
     };
 
@@ -139,7 +157,7 @@ fn main() {
     }
 }
 
-fn run_commands<R:std::io::Read>(tree_importer:NewickImporter<R>,cmd:Fertree)->Result<(),Box<dyn Error>> {
+fn run_commands<R:std::io::Read,T:TreeImporter<R>>(tree_importer: T, cmd:Fertree) ->Result<(),Box<dyn Error>> {
     match cmd {
         Fertree::Stats { cmd } => stats::run(tree_importer, cmd),
         Fertree::Annotate { traits } => annotate::run(tree_importer, traits),

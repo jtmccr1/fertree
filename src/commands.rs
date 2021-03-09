@@ -552,7 +552,7 @@ pub(crate) mod stats {
     }
 
     pub fn run<R:std::io::Read>(
-        trees: newick_importer::NewickImporter<R>,
+        trees: newick_importer::TreeImporter,
         cmd: Option<SubCommands>,
     ) -> Result<(), Box<dyn Error>> {
         //TODO move tree reading and output buffer handling out here and pass to commands
