@@ -539,6 +539,10 @@ impl MutableTree {
                     self.annotation_type
                         .insert(key.clone(), AnnotationValue::Continuous(0.0));
                 }
+                AnnotationValue::Boolean(_) => {
+                    self.annotation_type
+                        .insert(key.clone(), AnnotationValue::Boolean(true));
+                }
                 AnnotationValue::Set(_) => {
                     //TODO check internal types
                     self.annotation_type.insert(
@@ -576,6 +580,10 @@ impl MutableTree {
     pub fn annotate_tree(&mut self,key: String, value: AnnotationValue){
         self.tree_annotation.insert(key, value);
     }
+    pub fn get_tree_annnotation(&mut self,key: &str)->Option<&AnnotationValue>{
+        self.tree_annotation.get(key)
+    }
+
     pub fn set_id(&mut self, id: String) {
         self.id=Some(id);
     }

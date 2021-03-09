@@ -15,6 +15,7 @@ impl AnnotationParser {
     fn annotation(input: Node) -> PestResult<(String, AnnotationValue)> {
         Ok(match_nodes!(input.into_children();
             [key(k),value(v)]=>(k,v),
+            [key(k)]=>(k,AnnotationValue::Boolean(true))
         ))
     }
     fn annotation_set(input: Node) -> PestResult<Vec<(String, AnnotationValue)>> {

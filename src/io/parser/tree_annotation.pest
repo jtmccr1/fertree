@@ -11,7 +11,7 @@ double_inner={(!("\"")~ANY)+}
 inner_name = {(single_inner+)|(double_inner+)}
 quoted_name = {"'" ~ single_inner ~ "'" | "\"" ~ double_inner ~"\""}
 node_annotation={"[&"~annotation_set~"]"}
-annotation = {key~"="~value}
+annotation = {key~"="~value|key}
 key={(quoted_name|unquoted_name)}
 value = {continuous|set|discrete}
 continuous = {(ASCII_DIGIT | "." | "-"|^"e")+}

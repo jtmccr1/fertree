@@ -26,35 +26,75 @@ enum NexusBlock{
 }
 
 impl<R: std::io::Read> NexusImporter<R> {
-
-    fn prep_for_trees(&mut self) ->Result<(bool)>{
-        let block = self.find_next_block()?;
-        match block{
-            NexusBlock::TAXA=>self.read_taxa_block()?,
-            NexusBlock::TREES=>{},
+    pub fn from_reader(reader:R)->Self{
+        NexusImporter {
+            last_token: "".to_string(),
+            last_byte: None,
+            tree: None,
+            reader: BufReader::new(reader),
+            last_annotation: None,
+            taxa: Default::default(),
+            taxa_translation: Default::default(),
+            last_deliminator: b'\0',
+            reading_trees: false
         }
+    }
+    pub fn read_tree(input_reader: BufReader<R>) -> Result<MutableTree> {
+        let mut parser = NexusImporter {
+            last_token: "".to_string(),
+            last_byte: None,
+            tree: None,
+            reader: input_reader,
+            last_annotation: None,
+            taxa: Default::default(),
+            taxa_translation: Default::default(),
+            last_deliminator: b'\0',
+            reading_trees: false
+        };
+
+        parser.read_next_tree()
+    }
+
+
+    fn prep_for_trees(&mut self) ->Result<()>{
+        loop {
+            let block = self.find_next_block();
+            match block {
+                Ok(NexusBlock::TAXA) => self.read_taxa_block()?,
+                Ok(NexusBlock::TREES) => {
+                    self.read_translation_list();
+                    self.reading_trees = true;
+                   break
+                },
+                Err(IoError::EOF)=>break,
+                Err(e)=>{
+                    warn!("{}",e);
+                }
+            }
+        }
+        Ok(())
     }
 
 
     fn find_next_block(&mut self)->Result<NexusBlock>{
         loop {
-            let token = read_token("")?;
+            let token = self.read_token("")?;
             if token.eq_ignore_ascii_case("begin"){
                 break;
             }
         }
-        let block = read_token("")?;
+        let block = self.read_token(";")?;
         if block.eq_ignore_ascii_case("taxa") {
             Ok(NexusBlock::TAXA)
         }else if block.eq_ignore_ascii_case("trees"){
             Ok(NexusBlock::TREES)
         }else{
-            Err(IoError::FORMAT("unsupported nexus block" + block))
+            Err(IoError::FORMAT("unsupported nexus block ".to_string() + &*block))
         }
     }
     fn find_end_block(&mut self)->Result<()>{
         loop {
-            let token = read_token(";")?;
+            let token = self.read_token(";")?;
             if token.eq_ignore_ascii_case("end")||token.eq_ignore_ascii_case("endblock"){
                 break;
             }
@@ -64,31 +104,37 @@ impl<R: std::io::Read> NexusImporter<R> {
     fn read_taxa_block(&mut self)->Result<()>{
         let mut taxa_count =0;
         let token = self.read_token("")?;
+
         if token.eq_ignore_ascii_case("DIMENSIONS") {
-            let token2 = read_token("=;")?;
-            if token2.eq_ignore_ascii_case("NTAX") {
-                taxa_count = read_token(";")?.parse();
-            }else{
-                Err(IoError::FORMAT("missing ntax tag".to_string()))
-            }
+            let token2 = self.read_token("=;")?;
+            if !token2.eq_ignore_ascii_case("NTAX") {
+               panic!("missing ntax tag".to_string())
+            };
+            taxa_count = self.read_int(";")?;
+        };
+        let taxalabels = self.read_token(";")?;
+        if taxalabels.eq_ignore_ascii_case("TAXLABELS"){
+            loop {
+                let taxa = self.read_token(";")?.trim().to_string();
+                if taxa.len()>0 {
+                    let uniq = self.taxa.insert(taxa.to_string());
+                    if !uniq{
+                        panic!("duplicated taxa:".to_string()+ &*taxa)
+                    }
+                }
+                if self.last_deliminator==b';' {
+                    break;
+                }
+            };
+            if taxa_count!= self.taxa.len(){
+                panic!("taxa count does not match ntax tag".to_string())
+            };
+            Ok(())
+        }else{
+            panic!("Could not find taxlabels in taxa block")
         }
 
-        loop {
-            let taxa = self.read_token(";")?.trim();
-            if taxa.len()>0 {
-                let uniq = self.taxa.insert(taxa.to_string());
-                if !uniq{
-                    Err(IoError::DuplicateTaxon("duplicated taxa:"+taxa))
-                }
-            }
-            if self.last_deliminator==b';' {
-                break;
-            }
-        }
-        if taxa_count!= self.taxa.len(){
-            Err(IoError::FORMAT("taxa count does not match ntax tag".to_string()));
-        }
-        Ok(())
+
     }
 
     fn read_translation_list(&mut self)->Result<()>{
@@ -101,31 +147,28 @@ impl<R: std::io::Read> NexusImporter<R> {
                 } else {
                     let taxon = self.read_token(",;")?;
                     //TODO build from Taxa block if needed
-
                     if let Some(key) = self.taxa_translation.insert(key, taxon) {
                        break Err(IoError::FORMAT("translate map uses ".to_string() + &key + "twice"))
                     }
                 }
                 if self.last_deliminator==b';' {
+                    //now prep for reading trees that come next
+                    self.read_token(";");
                     break Ok(())
                 }
+
             }
         }else{
-            self.read_token(";")?;
             Ok(())
         }
 
     }
 
 
-    fn read_to_tree_block(&mut self){
-        unimplemented!();
-    }
-    fn read_next_tree(&mut self) -> Result<Option<MutableTree>> {
+    fn read_next_tree(&mut self) -> Result<MutableTree> {
         if !self.reading_trees{
-            self.read_to_tree_block()
+            self.prep_for_trees();
         }
-
         if self.last_token.eq_ignore_ascii_case("UTREE") || self.last_token.eq_ignore_ascii_case("TREE") {
             let start = std::time::Instant::now();
             self.tree = Some(MutableTree::new());
@@ -135,14 +178,17 @@ impl<R: std::io::Read> NexusImporter<R> {
             }
 
             let label = self.read_token("=;")?;
+            let tree_annotation = self.last_annotation.take();
+
             // ignoring comment that may have been picked up
             if self.last_deliminator != b'=' {
-                Err(IoError::FORMAT(format!("Missing  '=' or label for tree {}", label.as_str())))
-            } else if self.next_byte()? != b'(' {
-                Err(IoError::FORMAT("Missing tree definition in TREE command of TREES block".to_string()))
-            } else {
-                let tree_annotation = self.last_annotation.take();
+               panic!("Missing  '=' or label for tree {}", label.as_str())
+            }
 
+            if self.next_byte()? != b'(' {
+                panic!("Missing tree definition in TREE command of TREES block".to_string())
+            } else {
+                let rooted_comment = self.last_annotation.take();
                 let root = self.read_internal_node()?;
 
                 self.get_tree().set_root(Some(root));
@@ -161,14 +207,19 @@ impl<R: std::io::Read> NexusImporter<R> {
                                 self.get_tree().annotate_tree(key, value);
                             }
                         }
+                        if let Some(annotation) = rooted_comment {
+                            for (key, value) in annotation.into_iter() {
+                                self.get_tree().annotate_tree(key, value);
+                            }
+                        }
                         self.read_token(";")?;
-                        Ok(self.tree.take())
+                        Ok(self.tree.take().unwrap())
                     }
                     _ => Err(IoError::FORMAT("You may need to read to check for a root branch or annotation".to_string()))
                 }
             }
         } else if self.last_token.eq_ignore_ascii_case("ENDBLOCK") || self.last_token.eq_ignore_ascii_case("END") {
-            Ok(None)
+            Err(IoError::EOF)
         } else {
             Err(IoError::FORMAT(String::from("unknown command in tree block") + &*self.last_token))
         }
@@ -326,11 +377,20 @@ impl<R: std::io::Read> NexusImporter<R> {
                 self.last_deliminator = self.read_byte()?;
             }
         }
-
-        Ok(token)
+        self.last_token=token;
+        Ok(self.last_token.clone()) //TODO is this poor form
     }
 
     fn read_double(&mut self, deliminator: &str) -> Result<f64> {
+        let s = self.read_token(deliminator)?;
+        //TODO capture this error
+
+        match s.parse() {
+            Ok(l) => Ok(l),
+            Err(e) => Err(IoError::OTHER)
+        }
+    }
+    fn read_int(&mut self, deliminator: &str) -> Result<usize> {
         let s = self.read_token(deliminator)?;
         //TODO capture this error
 
@@ -410,11 +470,20 @@ impl<R: std::io::Read> NexusImporter<R> {
 impl<R: std::io::Read> Iterator for NexusImporter<R> {
     type Item = MutableTree;
     fn next(&mut self) -> Option<Self::Item> {
-            let tree = self.read_next_tree();
-            match tree {
-                Ok(node) => node,
-                Err(e) => panic!("parsing error {}", e),
+            if !self.reading_trees{
+                self.prep_for_trees();
+            };
+            match self.reading_trees {
+                false=>None,
+                true =>{
+                    match  self.read_next_tree() {
+                        Ok(node) => Some(node),
+                        Err(IoError::EOF)=>None,
+                        Err(e) => panic!("parsing error {}", e),
+                    }
+                }
             }
+
     }
 }
 
@@ -425,7 +494,121 @@ mod tests {
 
     #[test]
     fn test() {
-        let mut b = "This string will be read".as_bytes();
-        char::from(4);
+    let nexus ="#NEXUS
+        BEGIN TAXA;
+        DIMENSIONS NTAX=4;
+        TAXLABELS Tip0 Tip1 Tip2 Tip3;
+        END;
+        BEGIN TREES;
+        TREE tree0 = (Tip0:0.10948830688813957,Tip1:0.08499321350697361,(Tip2:0.17974073029346938,Tip3:0.1702835785780057):0.19361872371858507);
+        END;";
+        let tree = NexusImporter::read_tree(BufReader::new(nexus.as_bytes()));
+        assert!(tree.is_ok())
     }
+
+    #[test]
+    fn iterator(){
+        let nexus ="#NEXUS
+        BEGIN TAXA;
+        DIMENSIONS NTAX=4;
+        TAXLABELS Tip0 Tip1 Tip2 Tip3;
+        END;
+        BEGIN TREES;
+        TREE tree0 = (Tip0:0.10948830688813957,Tip1:0.08499321350697361,(Tip2:0.17974073029346938,Tip3:0.1702835785780057):0.19361872371858507);
+        TREE tree1 = (Tip0:0.10948830688813957,Tip1:0.08499321350697361,(Tip2:0.17974073029346938,Tip3:0.1702835785780057):0.19361872371858507);
+        END;";
+
+        let trees = NexusImporter::from_reader(nexus.as_bytes());
+        let mut tree_ids = vec![];
+        for mut tree in trees{
+            tree_ids.push(tree.id.take().unwrap());
+        }
+        assert_eq!(vec!["tree0","tree1"],tree_ids)
+    }
+    #[test]
+    fn traslation(){
+        let nexus ="#NEXUS
+        BEGIN TAXA;
+        DIMENSIONS NTAX=4;
+        TAXLABELS Tip0 Tip1 Tip2 Tip3;
+        END;
+        BEGIN TREES;
+        translate
+        0 Tip0,
+        1 Tip1,
+        2 Tip2,
+        3 Tip3
+        ;
+        TREE tree0 = (0:0.10948830688813957,1:0.08499321350697361,(2:0.17974073029346938,3:0.1702835785780057):0.19361872371858507);
+        TREE tree1 = (0:0.10948830688813957,1:0.08499321350697361,(2:0.17974073029346938,3:0.1702835785780057):0.19361872371858507);
+        END;";
+
+        let trees = NexusImporter::from_reader(nexus.as_bytes());
+        let mut tree_ids = vec![];
+        for mut tree in trees{
+            tree_ids.push(tree.id.take().unwrap());
+        }
+        assert_eq!(vec!["tree0","tree1"],tree_ids)
+    }
+
+    #[test]
+    fn annotation(){
+        let nexus ="#NEXUS
+        BEGIN TAXA;
+        DIMENSIONS NTAX=4;
+        TAXLABELS Tip0 Tip1 Tip2 Tip3;
+        END;
+        BEGIN TREES;
+        translate
+        0 Tip0,
+        1 Tip1,
+        2 Tip2,
+        3 Tip3
+        ;
+        TREE tree0 = (0:0.10948830688813957,1:0.08499321350697361,(2:0.17974073029346938,3:0.1702835785780057):0.19361872371858507)[&location=\"UK\"];
+        END;";
+
+        let trees = NexusImporter::from_reader(nexus.as_bytes());
+        let mut correct = false;
+        for mut tree in trees{
+            let root =tree.get_root().unwrap();
+           if let Some(AnnotationValue::Discrete(location)) = tree.get_annotation(root, "location"){
+               if location =="UK"{
+                   correct =true;
+               }
+           }
+
+        }
+        assert!(correct);
+    }
+    #[test]
+    fn with_tree_comments(){
+        let nexus ="#NEXUS
+        BEGIN TAXA;
+        DIMENSIONS NTAX=4;
+        TAXLABELS Tip0 Tip1 Tip2 Tip3;
+        END;
+        BEGIN TREES;
+        translate
+        0 Tip0,
+        1 Tip1,
+        2 Tip2,
+        3 Tip3
+        ;
+        TREE tree0 [&joint=1.9] = [&R] (0:0.10948830688813957,1:0.08499321350697361,(2:0.17974073029346938,3:0.1702835785780057):0.19361872371858507)[&location=\"UK\"];
+        END;";
+
+        let trees = NexusImporter::from_reader(nexus.as_bytes());
+        let mut correct = false;
+        for mut tree in trees{
+            let root =tree.get_root().unwrap();
+            if let Some(AnnotationValue::Continuous(num)) = tree.get_tree_annnotation("joint"){
+                if num < &2.0 {
+                    correct =true;
+                }
+            }
+        }
+        assert!(correct);
+    }
+
 }
