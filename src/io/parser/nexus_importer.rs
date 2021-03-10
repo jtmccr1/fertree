@@ -17,11 +17,11 @@ pub struct NexusImporter<R> {
     last_deliminator: u8,
     last_annotation: Option<HashMap<String, AnnotationValue>>,
     taxa: HashSet<String>,
-    taxa_translation: HashMap<String, String>,
+    taxa_translation:Option<HashMap<String, String>>,
     // TODO make taxon
     reading_trees: bool,
 }
-
+#[derive(Debug)]
 enum NexusBlock {
     TAXA,
     TREES,
@@ -36,7 +36,7 @@ impl<R: std::io::Read> NexusImporter<R> {
             reader: BufReader::new(reader),
             last_annotation: None,
             taxa: Default::default(),
-            taxa_translation: Default::default(),
+            taxa_translation: None,
             last_deliminator: b'\0',
             reading_trees: false,
         }
@@ -49,7 +49,7 @@ impl<R: std::io::Read> NexusImporter<R> {
             reader: input_reader,
             last_annotation: None,
             taxa: Default::default(),
-            taxa_translation: Default::default(),
+            taxa_translation: None,
             last_deliminator: b'\0',
             reading_trees: false,
         };
@@ -59,6 +59,7 @@ impl<R: std::io::Read> NexusImporter<R> {
     fn prep_for_trees(&mut self) -> Result<()> {
         loop {
             let block = self.find_next_block();
+            debug!("found {:?} block",block);
             match block {
                 Ok(NexusBlock::TAXA) => self.read_taxa_block()?,
                 Ok(NexusBlock::TREES) => {
@@ -129,6 +130,7 @@ impl<R: std::io::Read> NexusImporter<R> {
             if taxa_count != self.taxa.len() {
                 panic!("taxa count does not match ntax tag".to_string())
             };
+            debug!("read taxa block with {} taxa", taxa_count);
             Ok(())
         } else {
             panic!("Could not find taxlabels in taxa block")
@@ -136,8 +138,12 @@ impl<R: std::io::Read> NexusImporter<R> {
     }
 
     fn read_translation_list(&mut self) -> Result<()> {
+        debug!("looking for translation list");
         let token = self.read_token(";")?;
         if token.eq_ignore_ascii_case("TRANSLATE") {
+            debug!("reading translation list");
+
+            let mut taxa_map:HashMap<String,String> = HashMap::new();
             loop {
                 let key = self.read_token(",;")?;
                 if self.last_deliminator == b',' || self.last_deliminator == b';' {
@@ -145,11 +151,12 @@ impl<R: std::io::Read> NexusImporter<R> {
                 } else {
                     let taxon = self.read_token(",;")?;
                     //TODO build from Taxa block if needed
-                    if let Some(key) = self.taxa_translation.insert(key, taxon) {
+                    if let Some(key) = taxa_map.insert(key, taxon) {
                         break Err(IoError::FORMAT("translate map uses ".to_string() + &key + "twice"));
                     }
                 }
                 if self.last_deliminator == b';' {
+                    self.taxa_translation = Some(taxa_map);
                     //now prep for reading trees that come next
                     self.read_token(";")?;
                     break Ok(());
@@ -175,7 +182,7 @@ impl<R: std::io::Read> NexusImporter<R> {
         // should have had a closing ')'
         if self.last_deliminator != b')' {
             // throw new BadFormatException("Missing closing ')' in tree");
-            Err(IoError::OTHER)
+            panic!("BadFormat should end internal node with ')' but found {}",char::from(self.last_deliminator))
         } else {
             let label = self.read_token(",:();")?;
             let node = self.get_tree().make_internal_node(children);
@@ -188,8 +195,13 @@ impl<R: std::io::Read> NexusImporter<R> {
         }
     }
     fn read_external_node(&mut self) -> Result<TreeIndex> {
-        let label = self.read_token(",:();")?;
+        let mut label = self.read_token(",:();")?; //TODO end the nightmare of string str conversion
+        if let Some(taxa_map)=&self.taxa_translation{
+            label = taxa_map.get(&*label).unwrap().to_string();
+        }
         let node = self.get_tree().make_external_node(label.as_str(), None).expect("Failed to make tip");
+        trace!("read tip {} as node {}", label,node);
+
         self.annotation_node(node);
 
         Ok(node)
@@ -204,9 +216,9 @@ impl<R: std::io::Read> NexusImporter<R> {
             // is an external node
             self.read_external_node()?
         };
-        //TODO branch comments?
-
+        trace!("expect bl  for node {:?} with deliminator {}",branch,char::from(self.last_deliminator));
         if self.last_deliminator == b':' {
+            trace!("reading branch length");
             length = self.read_double(",():;")?;
             self.annotation_node(branch);
         }
@@ -277,7 +289,7 @@ impl<R: std::io::Read> NexusImporter<R> {
                 space = 0;
             } else if ch == b'[' {
                 self.skip_comments(ch)?;
-                // self.last_deliminator=' ';
+                self.last_deliminator=b' ';
                 done = true
             } else if quoted {
                     if is_space {
@@ -301,7 +313,7 @@ impl<R: std::io::Read> NexusImporter<R> {
                 }
         }
         if char::from(self.last_deliminator).is_whitespace() {
-           let mut ch = self.next_byte()?;
+            let mut ch = self.next_byte()?;
             while char::from(ch).is_whitespace() {
                 self.read()?;
                 ch = self.next_byte()?;
@@ -371,12 +383,12 @@ impl<R: std::io::Read> NexusImporter<R> {
             }
             comment.push(char::from(ch));
         }
-        debug!("Comment: {}", comment);
+        trace!("Comment: {}", comment);
         if let Ok(annotation) = AnnotationParser::parse_annotation(comment.as_str()) {
             self.last_annotation = Some(annotation);
             Ok(())
         } else {
-            Err(IoError::OTHER)
+            panic!("Error parsing annotation")
         }
     }
 
@@ -422,8 +434,8 @@ impl<R: std::io::Read> TreeImporter<R> for NexusImporter<R> {
             }
 
             let label = self.read_token("=;")?;
+            debug!("reading tree {}", label);
             let tree_annotation = self.last_annotation.take();
-
             // ignoring comment that may have been picked up
             if self.last_deliminator != b'=' {
                 panic!("Missing  '=' or label for tree {}", label.as_str())
@@ -598,7 +610,7 @@ mod tests {
         2 Tip2,
         3 Tip3
         ;
-        TREE tree0 [&joint=1.9] = [&R] (0:0.10948830688813957,1:0.08499321350697361,(2:0.17974073029346938,3:0.1702835785780057):0.19361872371858507)[&location=\"UK\"];
+        TREE tree0 [&joint=1.9] = [&R] (0[&location=\"UK\"]:[&rate=0.1]0.10948830688813957,1:0.08499321350697361,(2:0.17974073029346938,3:0.1702835785780057):0.19361872371858507)[&location=\"UK\"];
         END;";
 
         let trees = NexusImporter::from_reader(nexus.as_bytes());

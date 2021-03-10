@@ -5,9 +5,8 @@ use std::fmt;
 pub mod fixed_tree;
 pub mod mutable_tree;
 
-#[derive(Debug, Clone, Deserialize,PartialEq)]
 #[serde(untagged)]
-
+#[derive(Debug, Clone, Deserialize,PartialEq)]
 pub enum AnnotationValue {
     Discrete(String),
     Continuous(f64),

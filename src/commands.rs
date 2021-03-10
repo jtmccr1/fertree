@@ -564,6 +564,158 @@ pub(crate) mod stats {
     }
 }
 
+pub mod transmission_lineage {
+    use rebl::io::parser::tree_importer::TreeImporter;
+    use std::error::Error;
+    use rebl::tree::AnnotationValue;
+    use rebl::tree::mutable_tree::MutableTree;
+    use std::f32::NEG_INFINITY;
+    use std::io::Write;
+
+    #[derive(Debug)]
+    struct TransmissionLineage {
+        taxa: Vec<String>,
+        tmrca: f64,
+        parent_tmrca: f64,
+        id: usize,
+    }
+
+    impl TransmissionLineage {
+        fn add_taxa(&mut self, taxa: String) {
+            self.taxa.push(taxa)
+        }
+    }
+
+    struct LineageFinder {
+        lineages: Vec<TransmissionLineage>,
+        key: String,
+        value: AnnotationValue,
+        //TODO ignore tips without annotations?
+    }
+
+
+    impl LineageFinder {
+        fn new(key:String,value :AnnotationValue)->Self{
+            LineageFinder{lineages:vec![],key,value}
+        }
+        fn clear(&mut self){
+            self.lineages = vec![];
+        }
+        fn find_lineages(&mut self, tree: &MutableTree, node: usize, lineage_index: Option<usize>) {
+            if let Some(parent) = tree.get_parent(node) {
+                let child_annotation = tree.get_annotation(node, &self.key).unwrap();
+
+                if child_annotation == &self.value {
+                    if let Some(li) = lineage_index { // parent was in this lineage
+                        if tree.is_external(node) {
+                            let l = & mut self.lineages[li];
+                            l.add_taxa(tree.get_taxon(node).unwrap().to_string())
+                        } else {
+                            for child in tree.get_children(node) {
+                                self.find_lineages(tree, child, lineage_index);
+                            }
+                        }
+                    } else { // new lineage
+                        let id = self.lineages.len();
+                        let new_lineage = TransmissionLineage {
+                            taxa: vec![],
+                            tmrca: tree.get_height(node).unwrap(),
+                            parent_tmrca: tree.get_height(parent).unwrap(),
+                            id,
+                        };
+                        self.lineages.push(new_lineage);
+                        if tree.is_external(node) {
+                            let l = &mut self.lineages[id];
+                            l.add_taxa(tree.get_taxon(node).unwrap().to_string())
+                        } else {
+                            for child in tree.get_children(node) {
+                                self.find_lineages(tree, child, Some(id));
+                            }
+                        }
+                    }
+                } else {
+                    for child in tree.get_children(node) {
+                        self.find_lineages(tree, child, None);
+                    }
+                }
+            }else{
+                //At the root
+                let child_annotation = tree.get_annotation(node, &self.key).unwrap();
+                if child_annotation==&self.value{
+                    let id = self.lineages.len();
+                    let new_lineage = TransmissionLineage {
+                        taxa: vec![],
+                        tmrca: tree.get_height(node).unwrap(),
+                        parent_tmrca: NEG_INFINITY as f64,
+                        id,
+                    };
+                    self.lineages.push(new_lineage);
+                    for child in tree.get_children(node) {
+                        self.find_lineages(tree, child, Some(id));
+                    }
+                } else{
+                    for child in tree.get_children(node) {
+                        self.find_lineages(tree, child, None);
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn run<R: std::io::Read, T: TreeImporter<R>>(mut trees: T, key: String, value: String) -> Result<(), Box<dyn Error>> {
+        let stdout = std::io::stdout(); // get the global stdout entity
+        let mut handle = stdout.lock(); // acquire a lock on it
+        writeln!(handle,"tree\tlineage\ttaxa\ttmrca\tptmrca")?;
+
+        let mut count = 0;
+        let mut lineage_finder = LineageFinder::new(key, AnnotationValue::Discrete(value));
+        while trees.has_tree() {
+            let mut tree = trees.read_next_tree()?;
+            tree.calc_node_heights();
+            lineage_finder.find_lineages(&tree, tree.get_root().unwrap(), None);
+            for l in &lineage_finder.lineages{
+                for taxa in &l.taxa{
+                    writeln!(handle, "{}\t{}\t{}\t{}\t{}", count,l.id,taxa,l.tmrca,l.parent_tmrca)?;
+                }
+            }
+            count+=1;
+            lineage_finder.clear()
+        }
+        Ok(())
+    }
+    #[cfg(test)]
+    mod tests {
+        use rebl::io::parser::newick_importer::NewickImporter;
+        use std::io::BufReader;
+        use crate::commands::transmission_lineage::LineageFinder;
+        use rebl::tree::AnnotationValue;
+
+        #[test]
+        fn find_lineages(){
+            let s = "((A[&location=UK]:0.1,B[&location=USA]:0.1)[&location=UK]:0.1,'C d'[&location=US]:0.1)[&location=US];";
+            let mut tree = NewickImporter::read_tree(BufReader::new(s.as_bytes())).expect("error in parsing");
+            //TODO work this into Lineage Finder
+            tree.calc_node_heights();
+            let mut lf = LineageFinder::new("location".to_string(),AnnotationValue::Discrete("UK".to_string()));
+
+            lf.find_lineages(&tree, tree.get_root().unwrap(), None);
+            assert_eq!(1, lf.lineages.len());
+            assert_eq!("A",lf.lineages[0].taxa[0]);
+        }
+        #[test]
+        fn find_2lineages(){
+            let s = "((A[&location=UK]:0.1,B[&location=US]:0.1)[&location=UK]:0.1,'C d'[&location=US]:0.1)[&location=US];";
+            let mut tree = NewickImporter::read_tree(BufReader::new(s.as_bytes())).expect("error in parsing");
+            //TODO work this into Lineage Finder
+            tree.calc_node_heights();
+            let mut lf = LineageFinder::new("location".to_string(),AnnotationValue::Discrete("US".to_string()));
+
+            lf.find_lineages(&tree, tree.get_root().unwrap(), None);
+            assert_eq!(2, lf.lineages.len());
+        }
+    }
+}
+
 pub mod resolve {
     use rand::{thread_rng, Rng};
     use rebl::tree::mutable_tree::{MutableTree, TreeIndex};
@@ -783,7 +935,6 @@ pub mod resolve {
 
             assert_eq!(starting_height, tree.get_height(tree.root.unwrap()));
         }
-
     }
 }
 

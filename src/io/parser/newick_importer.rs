@@ -239,12 +239,12 @@ impl<R: std::io::Read> NewickImporter<R> {
             }
             comment.push(char::from(ch));
         }
-        debug!("Comment: {}", comment);
+        trace!("Comment: {}", comment);
         if let Ok(annotation) = AnnotationParser::parse_annotation(comment.as_str()) {
             self.last_annotation = Some(annotation);
             Ok(())
         } else {
-            Err(IoError::OTHER)
+            panic!("Error parsing annotation")
         }
     }
 

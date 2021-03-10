@@ -1,6 +1,6 @@
 mod commands;
 
-use crate::commands::split;
+use crate::commands::{split, transmission_lineage};
 use commands::{annotate, clades, extract, resolve, stats};
 use std::{io, path};
 use structopt::StructOpt;
@@ -32,11 +32,6 @@ enum Fertree {
     Stats {
         #[structopt(subcommand)]
         cmd: Option<stats::SubCommands>,
-    },
-    /// Label annotation state changes along a tree
-    Introductions {
-        #[structopt(short, long)]
-        to: String,
     },
     /// Annotate the tips of a tree from a tsv file.
     Annotate {
@@ -85,6 +80,21 @@ enum Fertree {
         #[structopt(subcommand)]
         cmd: resolve::SubCommands,
     },
+    ///Identify transmission lineages on a fully annotated tree
+    TransmissionLineages{
+        #[structopt(
+        short,
+        long,
+        help = "name of the discrete annotation"
+        )]
+        key: String,
+        #[structopt(
+        short,
+        long,
+        help = "the deme for which introductions are being labeled"
+        )]
+        to: String,
+    }
 }
 
 #[derive(Debug, StructOpt)]
@@ -155,6 +165,7 @@ fn run_commands<R:std::io::Read,T:TreeImporter<R>>(tree_importer: T, cmd:Fertree
             relaxed,
         } => split::run(tree_importer, min_size, explore, !relaxed),
         Fertree::Resolve { cmd } => resolve::run(tree_importer, cmd),
+        Fertree::TransmissionLineages{key,to}=>transmission_lineage::run(tree_importer,key,to),
         _ => {
             warn!("not implemented");
             Ok(())
