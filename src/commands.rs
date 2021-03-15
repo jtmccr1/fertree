@@ -548,10 +548,11 @@ pub mod stats {
     use std::io::Write;
     use structopt::StructOpt;
     use rebl::io::parser::tree_importer::TreeImporter;
+    use std::f64::NAN;
 
     #[derive(Debug, StructOpt)]
     pub enum SubCommands {
-        Heights,
+        Nodes
     }
 
     fn general_stats<R: std::io::Read, T: TreeImporter<R>>(mut trees: T) -> Result<(), Box<dyn Error>> {
@@ -589,10 +590,10 @@ pub mod stats {
         Ok(())
     }
 
-    fn node_heights<R:std::io::Read,T:TreeImporter<R>>(mut trees:T) -> Result<(), Box<dyn Error>> {
+    fn nodes<R:std::io::Read,T:TreeImporter<R>>(mut trees:T) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
-        writeln!(handle, "tree\theight\ttaxa")?;
+        writeln!(handle, "tree\theight\tlength\ttaxa")?;
         let mut t=0; //TODO use id if in tree maybe every tree gets an id in parser
         while trees.has_tree(){
             let mut tree = trees.read_next_tree()?;
@@ -603,7 +604,11 @@ pub mod stats {
                     None=>""
                 };
                 let height = tree.get_height(i).expect("Heights should be calculated");
-                writeln!(handle,"{}\t{}\t{}", t, height, taxa);
+                let mut length=NAN;
+                if let Some(p) = tree.get_parent(i){
+                    length = tree.get_height(p).expect("Hieghts should be calculated")-height;
+                }
+                writeln!(handle,"{}\t{}\t{}\t{}", t, height,length, taxa)?;
             }
             t+=1;
         }
@@ -620,7 +625,7 @@ pub mod stats {
 
         match cmd {
             None => general_stats(trees),
-            Some(SubCommands::Heights) => node_heights(trees),
+            Some(SubCommands::Nodes) => nodes(trees),
             _ => {
                 warn!("nothing done");
                 Ok(())
