@@ -592,7 +592,7 @@ pub mod stats {
     fn node_heights<R:std::io::Read,T:TreeImporter<R>>(mut trees:T) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
-        writeln!(handle, "tree\theight\t\ttaxa")?;
+        writeln!(handle, "tree\theight\ttaxa")?;
         let mut t=0; //TODO use id if in tree maybe every tree gets an id in parser
         while trees.has_tree(){
             let mut tree = trees.read_next_tree()?;
