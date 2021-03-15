@@ -592,6 +592,12 @@ impl MutableTree {
     pub fn set_id(&mut self, id: String) {
         self.id = Some(id);
     }
+    pub fn get_id(&self) ->Option<&str>{
+        match &self.id{
+            Some(id)=>Some(id.as_str()),
+            None=>None
+        }
+    }
 }
 //TODO I don't like that this is not lazy
 

@@ -11,7 +11,8 @@
 // }
 
 
-pub(crate) mod clades {
+
+pub mod clades {
     use rebl::tree::mutable_tree::{MutableTree, TreeIndex};
     use rebl::tree::AnnotationValue;
     use std::collections::HashSet;
@@ -184,7 +185,7 @@ pub(crate) mod clades {
     }
 }
 
-pub(crate) mod annotate {
+pub mod annotate {
     use super::command_io;
 
     use rebl::tree::mutable_tree::MutableTree;
@@ -258,6 +259,14 @@ pub mod extract {
         Taxa,
         /// Extract a tsv of the tip anotations
         Annotations,
+        /// Extract a tree from a nexus file
+        Tree{
+            #[structopt(long,required_if("index", "None"), help = "the id of the tree to extract")]
+            id: Option<String>,
+            #[structopt(long,required_if("id", "None"),help = "The 0 based index of the tree to extract.")]
+            index: Option<usize>,
+        }
+
     }
 
     pub fn run<R: std::io::Read, T: TreeImporter<R>>(trees: T,
@@ -266,6 +275,8 @@ pub mod extract {
         match cmd {
             SubCommands::Taxa => taxa(trees),
             SubCommands::Annotations => annotations(trees),
+            SubCommands::Tree { id, index } => tree(trees, id, index),
+
         }
     }
 
@@ -322,6 +333,37 @@ pub mod extract {
         } else {
             "".to_string()
         }
+    }
+
+    fn tree<R: std::io::Read, T:TreeImporter<R>>(mut trees: T, id: Option<String>, index: Option<usize>)->Result<(), Box<dyn Error>> {
+        let stdout = std::io::stdout(); // get the global stdout entity
+        let mut handle = stdout.lock(); // acquire a lock on it
+       //TODO could skip trees that don't match instead of parsing them all.
+        let mut found =false;
+
+        if let Some(i)=index{
+            let mut k = 0;
+            while trees.has_tree()& !found {
+                let tree = trees.read_next_tree()?;
+                if k==i{
+                    writeln!(handle,"{}", tree)?;
+                    found=true;
+                }
+                k+=1;
+            }
+        }else if let Some(tree_id) =id {
+            while trees.has_tree()& !found {
+                let tree = trees.read_next_tree()?;
+                if Some(tree_id.as_str())==tree.get_id(){
+                    writeln!(handle,"{}", tree)?;
+                    found=true;
+                }
+            }
+        };
+        if !found{
+            warn!("Tree not found");
+        }
+        Ok(())
     }
 }
 
@@ -501,7 +543,7 @@ pub mod split {
     }
 }
 
-pub(crate) mod stats {
+pub mod stats {
     use std::error::Error;
     use std::io::Write;
     use structopt::StructOpt;
@@ -509,7 +551,7 @@ pub(crate) mod stats {
 
     #[derive(Debug, StructOpt)]
     pub enum SubCommands {
-        Tips,
+        Heights,
     }
 
     fn general_stats<R: std::io::Read, T: TreeImporter<R>>(mut trees: T) -> Result<(), Box<dyn Error>> {
@@ -547,6 +589,29 @@ pub(crate) mod stats {
         Ok(())
     }
 
+    fn node_heights<R:std::io::Read,T:TreeImporter<R>>(mut trees:T) -> Result<(), Box<dyn Error>> {
+        let stdout = std::io::stdout(); // get the global stdout entity
+        let mut handle = stdout.lock(); // acquire a lock on it
+        writeln!(handle, "tree\theight\t\ttaxa")?;
+        let mut t=0; //TODO use id if in tree maybe every tree gets an id in parser
+        while trees.has_tree(){
+            let mut tree = trees.read_next_tree()?;
+            tree.calc_node_heights();
+            for i in 0..tree.get_node_count(){
+                let taxa = match tree.get_taxon(i){
+                  Some(t) =>t,
+                    None=>""
+                };
+                let height = tree.get_height(i).expect("Heights should be calculated");
+                writeln!(handle,"{}\t{}\t{}", t, height, taxa);
+            }
+            t+=1;
+        }
+
+        Ok(())
+
+    }
+
     pub fn run<R: std::io::Read, T: TreeImporter<R>>(
         trees: T,
         cmd: Option<SubCommands>,
@@ -555,7 +620,7 @@ pub(crate) mod stats {
 
         match cmd {
             None => general_stats(trees),
-
+            Some(SubCommands::Heights) => node_heights(trees),
             _ => {
                 warn!("nothing done");
                 Ok(())
