@@ -135,6 +135,8 @@ impl MutableTree {
         let mut me = MutableTree::new();
         me.tree_helper(tree, node, taxa);
         me.heights_known = true;
+        trace!("in tree: {}",me.branchlengths_known);
+        trace!("in tree: {}",me.heights_known);
         me
     }
     fn tree_helper(
@@ -227,6 +229,8 @@ impl MutableTree {
     }
 
     pub fn calculate_branchlengths(&mut self) {
+       if  !self.branchlengths_known {
+
         self.branchlengths_known = true;
         let mut i = 0;
         while i < self.nodes.len() {
@@ -244,7 +248,7 @@ impl MutableTree {
             i += 1;
         }
     }
-
+    }
     fn calc_height_above_root(&mut self) {
         let preorder = self.preorder_iter();
         for node_ref in preorder {
@@ -529,11 +533,15 @@ impl MutableTree {
         if let Some(annotation) = self.annotation_type.get(&key) {
             let value_type = std::mem::discriminant(&value);
             let annotation_type = std::mem::discriminant(annotation);
+
             if value_type == annotation_type {
-                let node = self.get_unwrapped_node_mut(index);
+            let node = self.get_unwrapped_node_mut(index);
                 node.annotations.insert(key, value);
-            } else {
-                panic!("tried to annotate node with an missmatched annotation type");
+            } else if let AnnotationValue::Continuous(c)=value{
+                    warn!("coercing {} to string for annotation {}",c,key.as_str());
+                    self.annotate_node(index,key,AnnotationValue::Discrete(c.to_string())) ;
+            }else{
+                panic!(format!("tried to annotate node with an missmatched annotation type for {}, found {} expected {}",key.as_str(),&value,&annotation));
             }
         } else {
             match value {

@@ -148,7 +148,7 @@ pub mod clades {
                 }
             }
             // not ignoring empty nodes they are counted
-            panic!("Annotation not found on a tip. all tips must be annotated")
+            panic!(format!("Annotation not found on a tip: {}. all tips must be annotated",tree.get_taxon(node_ref).unwrap_or("no label")));
         }
 
         let mut child_output = vec![];
@@ -528,12 +528,19 @@ pub mod split {
                     } else {
                         info!("tree: {} - {} tips", i, subtree.tips);
                     }
-                    debug!("{:?}", subtree);
                 }
                 if !explore {
                     for subtree in searcher.subtrees {
+                       
+                        println!("{}",searcher.tree.branchlengths_known);
+                        
+                        println!("{}",searcher.tree.heights_known);
                         let mut st = MutableTree::copy_subtree(&searcher.tree, subtree.root, taxa);
+                        trace!("copied  subtree");
+                        println!("{}",st.branchlengths_known);
+                        println!("{}",st.heights_known);
                         st.calculate_branchlengths();
+                        
                         writeln!(handle, "{}", st)?;
                     }
                 }
@@ -599,10 +606,7 @@ pub mod stats {
             let mut tree = trees.read_next_tree()?;
             tree.calc_node_heights();
             for i in 0..tree.get_node_count(){
-                let taxa = match tree.get_taxon(i){
-                  Some(t) =>t,
-                    None=>""
-                };
+                let taxa = tree.get_taxon(i).unwrap_or("");
                 let height = tree.get_height(i).expect("Heights should be calculated");
                 let mut length=NAN;
                 if let Some(p) = tree.get_parent(i){
