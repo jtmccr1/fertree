@@ -150,6 +150,16 @@ impl MutableTree {
             //make external node
             if let Some(taxon) = &tree.get_unwrapped_node(node).taxon {
                 new_node = self.make_external_node(taxon, Some(&taxa));
+                self.set_height(
+                    new_node.unwrap(),
+                    tree.get_height(node)
+                        .expect("found a node without a height"),
+                );
+                // copy annotations
+                let annotation_map = &tree.get_unwrapped_node(node).annotations;
+                for (key, value) in annotation_map.iter() {
+                    self.annotate_node(new_node.unwrap(), key.clone(), value.clone());
+                }
             }
             new_node
         } else {
@@ -244,7 +254,6 @@ impl MutableTree {
                     - self.get_height(i).expect("node should have height");
                 self.set_length(i, length);
             }
-
             i += 1;
         }
     }

@@ -531,14 +531,7 @@ pub mod split {
                 }
                 if !explore {
                     for subtree in searcher.subtrees {
-                       
-                        println!("{}",searcher.tree.branchlengths_known);
-                        
-                        println!("{}",searcher.tree.heights_known);
                         let mut st = MutableTree::copy_subtree(&searcher.tree, subtree.root, taxa);
-                        trace!("copied  subtree");
-                        println!("{}",st.branchlengths_known);
-                        println!("{}",st.heights_known);
                         st.calculate_branchlengths();
                         
                         writeln!(handle, "{}", st)?;
