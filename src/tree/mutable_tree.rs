@@ -7,6 +7,8 @@ use std::option::Option;
 pub type TreeIndex = usize;
 
 //TODO think more about missing data. Should these be options? Should they be guaranteed
+//TODO add tree annotation
+//TODO adopt nodeorder
 #[derive(Debug)]
 pub struct MutableTreeNode {
     pub taxon: Option<String>,
@@ -48,25 +50,38 @@ pub struct MutableTree {
     pub root: Option<TreeIndex>,
     pub heights_known: bool,
     pub branchlengths_known: bool,
+    pub id: Option<String>,
+    pub tree_annotation: HashMap<String, AnnotationValue>,
+}
+
+impl Default for MutableTree {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MutableTree {
-    pub fn from_fixed_node(root: FixedNode) -> Self {
-        let mut tree = MutableTree {
-            nodes: Vec::new(),
-            external_nodes: Vec::new(),
-            internal_nodes: Vec::new(),
-            annotation_type: HashMap::new(),
-            taxon_node_map: HashMap::new(),
+    pub fn new() -> Self {
+        MutableTree {
+            nodes: vec![],
+            external_nodes: vec![],
+            internal_nodes: vec![],
+            annotation_type: Default::default(),
+            taxon_node_map: Default::default(),
             root: None,
             heights_known: false,
-            branchlengths_known: true,
-        };
+            branchlengths_known: false,
+            id: None,
+            tree_annotation: HashMap::new(),
+        }
+    }
+    pub fn from_fixed_node(root: FixedNode) -> Self {
+        let mut tree = MutableTree::new();
+        tree.branchlengths_known = true;
         tree.fixed_node_helper(root, None);
         tree.set_root(Some(0));
         tree.calc_node_heights();
         tree.branchlengths_known = true;
-
         tree
     }
 
@@ -106,16 +121,7 @@ impl MutableTree {
     }
 
     pub fn from_tree(tree: &MutableTree, taxa: &HashSet<String>) -> Self {
-        let mut me = MutableTree {
-            nodes: Vec::new(),
-            external_nodes: Vec::new(),
-            internal_nodes: Vec::new(),
-            annotation_type: HashMap::new(),
-            taxon_node_map: HashMap::new(),
-            root: None,
-            heights_known: false,
-            branchlengths_known: false,
-        };
+        let mut me = MutableTree::new();
         let root = tree
             .get_root()
             .expect("every tree should have a root at least nominally");
@@ -126,19 +132,11 @@ impl MutableTree {
     }
 
     pub fn copy_subtree(tree: &MutableTree, node: TreeIndex, taxa: &HashSet<String>) -> Self {
-        let mut me = MutableTree {
-            nodes: Vec::new(),
-            external_nodes: Vec::new(),
-            internal_nodes: Vec::new(),
-            annotation_type: HashMap::new(),
-            taxon_node_map: HashMap::new(),
-            root: None,
-            heights_known: false,
-            branchlengths_known: false,
-        };
+        let mut me = MutableTree::new();
         me.tree_helper(tree, node, taxa);
         me.heights_known = true;
-        me.calculate_branchlengths();
+        trace!("in tree: {}",me.branchlengths_known);
+        trace!("in tree: {}",me.heights_known);
         me
     }
     fn tree_helper(
@@ -151,8 +149,19 @@ impl MutableTree {
         if tree.get_num_children(node) == 0 {
             //make external node
             if let Some(taxon) = &tree.get_unwrapped_node(node).taxon {
-                new_node = self.make_external_node(taxon, &taxa);
+                new_node = self.make_external_node(taxon, Some(&taxa));
+                self.set_height(
+                    new_node.unwrap(),
+                    tree.get_height(node)
+                        .expect("found a node without a height"),
+                );
+                // copy annotations
+                let annotation_map = &tree.get_unwrapped_node(node).annotations;
+                for (key, value) in annotation_map.iter() {
+                    self.annotate_node(new_node.unwrap(), key.clone(), value.clone());
+                }
             }
+            new_node
         } else {
             let nchildren = tree.get_num_children(node);
             let mut children: Vec<usize> = vec![];
@@ -171,23 +180,23 @@ impl MutableTree {
             }
             if children.len() > 1 {
                 new_node = Some(self.make_root_node(children));
+                self.set_height(
+                    new_node.unwrap(),
+                    tree.get_height(node)
+                        .expect("found a node without a height"),
+                );
+                // copy annotations
+                let annotation_map = &tree.get_unwrapped_node(node).annotations;
+                for (key, value) in annotation_map.iter() {
+                    self.annotate_node(new_node.unwrap(), key.clone(), value.clone());
+                }
+                new_node
             } else if children.len() == 1 {
-                return Some(children.remove(0));
+                Some(children[0])
+            } else {
+                None //TODO should never hit this would be caught above in AHHHH
             }
         }
-        if let Some(new_node_i) = new_node {
-            self.set_height(
-                new_node_i,
-                tree.get_height(node)
-                    .expect("found a node without a height"),
-            );
-            // copy annotations
-            let annotation_map = &tree.get_unwrapped_node(node).annotations;
-            for (key, value) in annotation_map.iter() {
-                self.annotate_node(new_node_i, key.clone(), value.clone());
-            }
-        }
-        new_node
     }
     pub fn get_height(&self, node: TreeIndex) -> Option<f64> {
         if let Some(height) = self.get_unwrapped_node(node).height {
@@ -199,15 +208,15 @@ impl MutableTree {
     pub fn get_node_label(&self, node: TreeIndex) -> &Option<String> {
         &self.get_unwrapped_node(node).label
     }
-    fn get_height_safely(&mut self, node: TreeIndex) -> f64 {
-        if !self.heights_known {
-            self.calc_node_heights();
-        }
-        self.get_unwrapped_node(node)
-            .height
-            .expect("how did it come to this. I thought heights were trust worthy")
-    }
-
+    // fn get_height_safely(&mut self, node: TreeIndex) -> f64 {
+    //     if !self.heights_known {
+    //         self.calc_node_heights();
+    //     }
+    //     self.get_unwrapped_node(node)
+    //         .height
+    //         .expect("how did it come to this. I thought heights were trust worthy")
+    // }
+    //TODO clean up bl/h knowledge;
     pub fn calc_node_heights(&mut self) {
         if !self.heights_known {
             self.heights_known = true;
@@ -230,6 +239,8 @@ impl MutableTree {
     }
 
     pub fn calculate_branchlengths(&mut self) {
+       if  !self.branchlengths_known {
+
         self.branchlengths_known = true;
         let mut i = 0;
         while i < self.nodes.len() {
@@ -243,11 +254,10 @@ impl MutableTree {
                     - self.get_height(i).expect("node should have height");
                 self.set_length(i, length);
             }
-
             i += 1;
         }
     }
-
+    }
     fn calc_height_above_root(&mut self) {
         let preorder = self.preorder_iter();
         for node_ref in preorder {
@@ -270,8 +280,20 @@ impl MutableTree {
         self.branchlengths_known = false;
     }
 
-    fn make_external_node(&mut self, taxon: &str, taxa: &HashSet<String>) -> Option<TreeIndex> {
-        if taxa.contains(taxon) {
+    pub fn make_external_node(&mut self, taxon: &str, taxa_set: Option<&HashSet<String>>) -> Option<TreeIndex> {
+        if let Some(taxa) = taxa_set {
+            if taxa.contains(taxon) {
+                let index = self.nodes.len();
+                let new_node = MutableTreeNode::new(Some(taxon.to_string()), index);
+                self.nodes.push(new_node);
+                self.external_nodes.push(index);
+                self.taxon_node_map.insert(taxon.to_string(), index);
+
+                Some(index)
+            } else {
+                None
+            }
+        } else {
             let index = self.nodes.len();
             let new_node = MutableTreeNode::new(Some(taxon.to_string()), index);
             self.nodes.push(new_node);
@@ -279,8 +301,6 @@ impl MutableTree {
             self.taxon_node_map.insert(taxon.to_string(), index);
 
             Some(index)
-        } else {
-            None
         }
     }
     /// Make and return an internal node. Provided children will be added to the node in
@@ -522,11 +542,15 @@ impl MutableTree {
         if let Some(annotation) = self.annotation_type.get(&key) {
             let value_type = std::mem::discriminant(&value);
             let annotation_type = std::mem::discriminant(annotation);
+
             if value_type == annotation_type {
-                let node = self.get_unwrapped_node_mut(index);
+            let node = self.get_unwrapped_node_mut(index);
                 node.annotations.insert(key, value);
-            } else {
-                panic!("tried to annotate node with an missmatched annotation type");
+            } else if let AnnotationValue::Continuous(c)=value{
+                    warn!("coercing {} to string for annotation {}",c,key.as_str());
+                    self.annotate_node(index,key,AnnotationValue::Discrete(c.to_string())) ;
+            }else{
+                panic!(format!("tried to annotate node with an missmatched annotation type for {}, found {} expected {}",key.as_str(),&value,&annotation));
             }
         } else {
             match value {
@@ -537,6 +561,10 @@ impl MutableTree {
                 AnnotationValue::Continuous(_) => {
                     self.annotation_type
                         .insert(key.clone(), AnnotationValue::Continuous(0.0));
+                }
+                AnnotationValue::Boolean(_) => {
+                    self.annotation_type
+                        .insert(key.clone(), AnnotationValue::Boolean(true));
                 }
                 AnnotationValue::Set(_) => {
                     //TODO check internal types
@@ -555,15 +583,36 @@ impl MutableTree {
         node.label = Some(label);
     }
 
-    pub fn get_label(&self, index: TreeIndex) -> &Option<String> {
+    pub fn get_label(&self, index: TreeIndex) -> Option<&str> {
         let node = self.get_unwrapped_node(index);
-        &node.label
+        if let Some(label) = &node.label {
+            Some(label.as_str())
+        } else {
+            None
+        }
     }
     pub fn get_taxon_node(&self, taxon: &str) -> Option<usize> {
         if let Some(i) = self.taxon_node_map.get(taxon) {
             Some(*i)
         } else {
             None
+        }
+    }
+
+    pub fn annotate_tree(&mut self, key: String, value: AnnotationValue) {
+        self.tree_annotation.insert(key, value);
+    }
+    pub fn get_tree_annnotation(&mut self, key: &str) -> Option<&AnnotationValue> {
+        self.tree_annotation.get(key)
+    }
+
+    pub fn set_id(&mut self, id: String) {
+        self.id = Some(id);
+    }
+    pub fn get_id(&self) ->Option<&str>{
+        match &self.id{
+            Some(id)=>Some(id.as_str()),
+            None=>None
         }
     }
 }

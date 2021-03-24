@@ -1,0 +1,21 @@
+//
+// Created by intellij-pest on 2021-02-23
+// tree_annotation
+// Author: jtmccrone
+//
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+valid_name_char = {!( "="|"("|")"|"["|"]"|"{"|"}"|","| ";" | ":"| WHITE_SPACE| "\'" |"\"") ~ ANY}
+unquoted_name ={valid_name_char+}
+single_inner={(!("\'")~ANY)+}
+double_inner={(!("\"")~ANY)+}
+inner_name = {(single_inner+)|(double_inner+)}
+quoted_name = {"'" ~ single_inner ~ "'" | "\"" ~ double_inner ~"\""}
+node_annotation={"[&"~annotation_set~"]"}
+annotation = {key~"="~value|key}
+key={(quoted_name|unquoted_name)}
+value = {continuous|set|discrete}
+continuous = {(ASCII_DIGIT | "." | "-"|^"e")+}
+discrete = {(quoted_name|unquoted_name)}
+one_entry={continuous|discrete}
+set={"{" ~one_entry ~ (","~one_entry)* ~"}"}
+annotation_set = {(annotation~","~annotation_set) | annotation}

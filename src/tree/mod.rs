@@ -5,12 +5,12 @@ use std::fmt;
 pub mod fixed_tree;
 pub mod mutable_tree;
 
-#[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
-
+#[derive(Debug, Clone, Deserialize,PartialEq)]
 pub enum AnnotationValue {
     Discrete(String),
     Continuous(f64),
+    Boolean(bool),
     Set(Vec<AnnotationValue>),
 }
 
@@ -19,6 +19,7 @@ impl fmt::Display for AnnotationValue {
         match self {
             AnnotationValue::Discrete(string) => write!(f, "{}", string),
             AnnotationValue::Continuous(f64) => write!(f, "{}", f64.to_string()),
+            AnnotationValue::Boolean(b)=>write!(f, "{}", b.to_string()),
             AnnotationValue::Set(s) => {
                 let s = s
                     .iter()
