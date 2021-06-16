@@ -3,6 +3,7 @@ use super::AnnotationValue;
 use std::collections::hash_map::Keys;
 use std::collections::{HashMap, HashSet};
 use std::option::Option;
+use std::cmp::Ordering;
 
 pub type TreeIndex = usize;
 
@@ -178,32 +179,27 @@ impl MutableTree {
                 }
                 visited += 1;
             }
-            if children.len() > 1 {
-                new_node = Some(self.make_root_node(children));
-                self.set_height(
-                    new_node.unwrap(),
-                    tree.get_height(node)
-                        .expect("found a node without a height"),
-                );
-                // copy annotations
-                let annotation_map = &tree.get_unwrapped_node(node).annotations;
-                for (key, value) in annotation_map.iter() {
-                    self.annotate_node(new_node.unwrap(), key.clone(), value.clone());
-                }
-                new_node
-            } else if children.len() == 1 {
-                Some(children[0])
-            } else {
-                None //TODO should never hit this would be caught above in AHHHH
+            match children.len().cmp(&1){
+                Ordering::Less => {panic!("should have caught this error before this line!")}
+                Ordering::Equal => { Some(children[0])}
+                Ordering::Greater => {
+                    new_node = Some(self.make_root_node(children));
+                    self.set_height(
+                        new_node.unwrap(),
+                        tree.get_height(node)
+                            .expect("found a node without a height"),
+                    );
+                    // copy annotations
+                    let annotation_map = &tree.get_unwrapped_node(node).annotations;
+                    for (key, value) in annotation_map.iter() {
+                        self.annotate_node(new_node.unwrap(), key.clone(), value.clone());
+                    }
+                    new_node}
             }
         }
     }
     pub fn get_height(&self, node: TreeIndex) -> Option<f64> {
-        if let Some(height) = self.get_unwrapped_node(node).height {
-            Some(height)
-        } else {
-            None
-        }
+        self.get_unwrapped_node(node).height
     }
     pub fn get_node_label(&self, node: TreeIndex) -> &Option<String> {
         &self.get_unwrapped_node(node).label
@@ -420,11 +416,7 @@ impl MutableTree {
 
     pub fn get_taxon(&self, node_ref: TreeIndex) -> Option<&str> {
         let node = self.get_unwrapped_node(node_ref);
-        if let Some(taxon) = &node.taxon {
-            Some(taxon.as_str())
-        } else {
-            None
-        }
+        node.taxon.as_deref()
     }
 
     pub fn get_node_count(&self) -> usize {
@@ -519,11 +511,7 @@ impl MutableTree {
     }
     pub fn get_length(&self, node_ref: TreeIndex) -> Option<f64> {
         let node = self.get_node(node_ref).expect("node not in tree");
-        if let Some(l) = node.length {
-            Some(l)
-        } else {
-            None
-        }
+        node.length
     }
     pub fn get_annotation(&self, index: TreeIndex, key: &str) -> Option<&AnnotationValue> {
         return self.get_unwrapped_node(index).annotations.get(key);
@@ -550,7 +538,7 @@ impl MutableTree {
                     warn!("coercing {} to string for annotation {}",c,key.as_str());
                     self.annotate_node(index,key,AnnotationValue::Discrete(c.to_string())) ;
             }else{
-                panic!(format!("tried to annotate node with an missmatched annotation type for {}, found {} expected {}",key.as_str(),&value,&annotation));
+                panic!("tried to annotate node with an missmatched annotation type for {}, found {} expected {}",key.as_str(),&value,&annotation);
             }
         } else {
             match value {
@@ -585,18 +573,10 @@ impl MutableTree {
 
     pub fn get_label(&self, index: TreeIndex) -> Option<&str> {
         let node = self.get_unwrapped_node(index);
-        if let Some(label) = &node.label {
-            Some(label.as_str())
-        } else {
-            None
-        }
+        node.label.as_deref()
     }
     pub fn get_taxon_node(&self, taxon: &str) -> Option<usize> {
-        if let Some(i) = self.taxon_node_map.get(taxon) {
-            Some(*i)
-        } else {
-            None
-        }
+        self.taxon_node_map.get(taxon).copied()
     }
 
     pub fn annotate_tree(&mut self, key: String, value: AnnotationValue) {
@@ -610,10 +590,7 @@ impl MutableTree {
         self.id = Some(id);
     }
     pub fn get_id(&self) ->Option<&str>{
-        match &self.id{
-            Some(id)=>Some(id.as_str()),
-            None=>None
-        }
+        self.id.as_deref()
     }
 }
 //TODO I don't like that this is not lazy

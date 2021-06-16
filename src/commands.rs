@@ -148,7 +148,7 @@ pub mod clades {
                 }
             }
             // not ignoring empty nodes they are counted
-            panic!(format!("Annotation not found on a tip: {}. all tips must be annotated",tree.get_taxon(node_ref).unwrap_or("no label")));
+            panic!("Annotation not found on a tip: {}. all tips must be annotated",tree.get_taxon(node_ref).unwrap_or("no label"));
         }
 
         let mut child_output = vec![];
@@ -548,7 +548,6 @@ pub mod stats {
     use std::io::Write;
     use structopt::StructOpt;
     use rebl::io::parser::tree_importer::TreeImporter;
-    use std::f64::NAN;
 
     #[derive(Debug, StructOpt)]
     pub enum SubCommands {
@@ -601,7 +600,7 @@ pub mod stats {
             for i in 0..tree.get_node_count(){
                 let taxa = tree.get_taxon(i).unwrap_or("");
                 let height = tree.get_height(i).expect("Heights should be calculated");
-                let mut length=NAN;
+                let mut length=f64::NAN;
                 if let Some(p) = tree.get_parent(i){
                     length = tree.get_height(p).expect("Hieghts should be calculated")-height;
                 }
@@ -623,10 +622,6 @@ pub mod stats {
         match cmd {
             None => general_stats(trees),
             Some(SubCommands::Nodes) => nodes(trees),
-            _ => {
-                warn!("nothing done");
-                Ok(())
-            }
         }
     }
 }
@@ -636,7 +631,6 @@ pub mod transmission_lineage {
     use std::error::Error;
     use rebl::tree::AnnotationValue;
     use rebl::tree::mutable_tree::MutableTree;
-    use std::f32::NEG_INFINITY;
     use std::io::Write;
 
     #[derive(Debug)]
@@ -645,11 +639,22 @@ pub mod transmission_lineage {
         tmrca: f64,
         parent_tmrca: f64,
         id: usize,
+        source:String,
+        last_seen:f64,
+        first_seen:f64,
     }
 
     impl TransmissionLineage {
-        fn add_taxa(&mut self, taxa: String) {
-            self.taxa.push(taxa)
+        fn add_taxa(&mut self,  tree: &MutableTree, node: usize) {
+            let taxa = tree.get_taxon(node).unwrap().to_string();
+            self.taxa.push(taxa);
+            let height = tree.get_height(node).expect("You need to calculate heights before making lineages");
+            if height< self.last_seen{
+                self.last_seen=height;
+            }
+            if height> self.first_seen{
+                self.first_seen=height;
+            }
         }
     }
 
@@ -676,7 +681,7 @@ pub mod transmission_lineage {
                     if let Some(li) = lineage_index { // parent was in this lineage
                         if tree.is_external(node) {
                             let l = & mut self.lineages[li];
-                            l.add_taxa(tree.get_taxon(node).unwrap().to_string())
+                            l.add_taxa(tree, node);
                         } else {
                             for child in tree.get_children(node) {
                                 self.find_lineages(tree, child, lineage_index);
@@ -684,16 +689,20 @@ pub mod transmission_lineage {
                         }
                     } else { // new lineage
                         let id = self.lineages.len();
+                        let parent_location = tree.get_annotation(parent,&self.key).unwrap();
                         let new_lineage = TransmissionLineage {
                             taxa: vec![],
                             tmrca: tree.get_height(node).unwrap(),
                             parent_tmrca: tree.get_height(parent).unwrap(),
                             id,
+                            source:parent_location.to_string(),
+                            first_seen:f64::INFINITY,
+                            last_seen:f64::NEG_INFINITY
                         };
                         self.lineages.push(new_lineage);
                         if tree.is_external(node) {
                             let l = &mut self.lineages[id];
-                            l.add_taxa(tree.get_taxon(node).unwrap().to_string())
+                            l.add_taxa(tree, node);
                         } else {
                             for child in tree.get_children(node) {
                                 self.find_lineages(tree, child, Some(id));
@@ -713,8 +722,11 @@ pub mod transmission_lineage {
                     let new_lineage = TransmissionLineage {
                         taxa: vec![],
                         tmrca: tree.get_height(node).unwrap(),
-                        parent_tmrca: NEG_INFINITY as f64,
+                        parent_tmrca: f32::NEG_INFINITY as f64,
                         id,
+                        source:child_annotation.to_string(),
+                        first_seen:f64::INFINITY,
+                        last_seen:f64::NEG_INFINITY
                     };
                     self.lineages.push(new_lineage);
                     for child in tree.get_children(node) {
@@ -729,11 +741,14 @@ pub mod transmission_lineage {
         }
     }
 
-    pub fn run<R: std::io::Read, T: TreeImporter<R>>(mut trees: T, key: String, value: String) -> Result<(), Box<dyn Error>> {
+    pub fn run<R: std::io::Read, T: TreeImporter<R>>(mut trees: T, key: String, value: String,taxa_flag:bool) -> Result<(), Box<dyn Error>> {
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
-        writeln!(handle,"tree\tlineage\ttaxa\ttmrca\tptmrca")?;
-
+        if taxa_flag {
+            writeln!(handle, "tree\tlineage\ttaxa\ttmrca\tptmrca\tsource")?;
+        }else{
+            writeln!(handle, "tree\tlineage\tntaxa\ttmrca\tptmrca\tsource")?;
+        }
         let mut count = 0;
         let mut lineage_finder = LineageFinder::new(key, AnnotationValue::Discrete(value));
         while trees.has_tree() {
@@ -741,8 +756,12 @@ pub mod transmission_lineage {
             tree.calc_node_heights();
             lineage_finder.find_lineages(&tree, tree.get_root().unwrap(), None);
             for l in &lineage_finder.lineages{
-                for taxa in &l.taxa{
-                    writeln!(handle, "{}\t{}\t{}\t{}\t{}", count,l.id,taxa,l.tmrca,l.parent_tmrca)?;
+                if taxa_flag {
+                    for taxa in &l.taxa {
+                        writeln!(handle, "{}\t{}\t{}\t{}\t{}\t{}", count, l.id, taxa, l.tmrca, l.parent_tmrca, l.source)?;
+                    }
+                }else{
+                    writeln!(handle, "{}\t{}\t{}\t{}\t{}\t{}", count, l.id, l.taxa.len(), l.tmrca, l.parent_tmrca, l.source)?;
                 }
             }
             count+=1;
@@ -1013,7 +1032,7 @@ pub mod command_io {
     use std::path;
 
     //HashMap<String,HashMap<String,AnnotationValue>>
-    pub fn parse_tsv(trait_file: &path::PathBuf) -> Result<Reader<File>, Box<dyn Error>> {
+    pub fn parse_tsv(trait_file: &path::Path) -> Result<Reader<File>, Box<dyn Error>> {
         let file = File::open(trait_file)?;
         let mut rdr = csv::ReaderBuilder::new()
             .delimiter(b'\t')

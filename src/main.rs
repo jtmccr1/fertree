@@ -94,6 +94,8 @@ enum Fertree {
         help = "the deme for which introductions are being labeled"
         )]
         to: String,
+        #[structopt(short, long, help = "output one row for each taxa")]
+        taxa: bool,
     }
 }
 
@@ -165,10 +167,6 @@ fn run_commands<R:std::io::Read,T:TreeImporter<R>>(tree_importer: T, cmd:Fertree
             relaxed,
         } => split::run(tree_importer, min_size, explore, !relaxed),
         Fertree::Resolve { cmd } => resolve::run(tree_importer, cmd),
-        Fertree::TransmissionLineages{key,to}=>transmission_lineage::run(tree_importer,key,to),
-        _ => {
-            warn!("not implemented");
-            Ok(())
-        }
+        Fertree::TransmissionLineages{key,to,taxa}=>transmission_lineage::run(tree_importer,key,to,taxa),
     }
 }

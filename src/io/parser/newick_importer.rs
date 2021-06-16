@@ -43,8 +43,7 @@ impl<R: std::io::Read> NewickImporter<R> {
     fn read_internal_node(&mut self) -> Result<TreeIndex> {
         self.read_byte()?;
         //assert =='('
-        let mut children = vec![];
-        children.push(self.read_branch()?);
+        let mut children = vec![self.read_branch()?];
 
         // read subsequent children
         while self.last_deliminator == b',' {
@@ -54,7 +53,7 @@ impl<R: std::io::Read> NewickImporter<R> {
         // should have had a closing ')'
         if self.last_deliminator != b')' {
             // throw new BadFormatException("Missing closing ')' in tree");
-            Err(IoError::OTHER)
+            Err(IoError::Other)
         } else {
             let label = self.read_token(",:();")?;
             let node = self.get_tree().make_internal_node(children);
@@ -208,8 +207,8 @@ impl<R: std::io::Read> NewickImporter<R> {
             None => {
                 match self.reader.read(&mut buf) {
                     Ok(1) => Ok(buf[0]),
-                    Ok(0) => Err(IoError::EOF),
-                    _ => Err(IoError::OTHER)
+                    Ok(0) => Err(IoError::Eof),
+                    _ => Err(IoError::Other)
                 }
             }
             Some(c) => {
@@ -292,7 +291,7 @@ impl<R: std::io::Read> TreeImporter<R> for NewickImporter<R> {
                 self.unread_byte(b'(');
                 true
             }
-            Err(IoError::EOF) => false,
+            Err(IoError::Eof) => false,
             Err(e) => panic!("parsing error: {}", e)
         }
     }
@@ -308,7 +307,7 @@ impl<R: std::io::Read> TreeImporter<R> for NewickImporter<R> {
         self.get_tree().branchlengths_known = true;
 
         match self.last_deliminator {
-            b')' => Err(IoError::OTHER),
+            b')' => Err(IoError::Other),
             b';' => {
                 trace!(
                     "Tree parsed in {} milli seconds ",
@@ -316,7 +315,7 @@ impl<R: std::io::Read> TreeImporter<R> for NewickImporter<R> {
                 );
                 Ok(self.tree.take().unwrap())
             }
-            _ => Err(IoError::OTHER)
+            _ => Err(IoError::Other)
         }
     }
 }
@@ -369,7 +368,7 @@ mod tests {
 
     #[test]
     fn quoted() {
-        assert!(true, NewickImporter::read_tree(BufReader::new("('234] ':1,'here a *':1);".as_bytes())).is_ok());
+        assert!(true, "{}", NewickImporter::read_tree(BufReader::new("('234] ':1,'here a *':1);".as_bytes())).is_ok());
     }
 
     #[test]

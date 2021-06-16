@@ -23,8 +23,8 @@ pub struct NexusImporter<R> {
 }
 #[derive(Debug)]
 enum NexusBlock {
-    TAXA,
-    TREES,
+    Taxa,
+    Trees,
 }
 
 impl<R: std::io::Read> NexusImporter<R> {
@@ -61,13 +61,13 @@ impl<R: std::io::Read> NexusImporter<R> {
             let block = self.find_next_block();
             debug!("found {:?} block",block);
             match block {
-                Ok(NexusBlock::TAXA) => self.read_taxa_block()?,
-                Ok(NexusBlock::TREES) => {
+                Ok(NexusBlock::Taxa) => self.read_taxa_block()?,
+                Ok(NexusBlock::Trees) => {
                     self.read_translation_list()?;
                     self.reading_trees = true;
                     break;
                 }
-                Err(IoError::EOF) => break,
+                Err(IoError::Eof) => break,
                 Err(e) => {
                     warn!("{}", e);
                 }
@@ -86,11 +86,11 @@ impl<R: std::io::Read> NexusImporter<R> {
         }
         let block = self.read_token(";")?;
         if block.eq_ignore_ascii_case("taxa") {
-            Ok(NexusBlock::TAXA)
+            Ok(NexusBlock::Taxa)
         } else if block.eq_ignore_ascii_case("trees") {
-            Ok(NexusBlock::TREES)
+            Ok(NexusBlock::Trees)
         } else {
-            Err(IoError::FORMAT("unsupported nexus block ".to_string() + &*block))
+            Err(IoError::Format("unsupported nexus block ".to_string() + &*block))
         }
     }
     // fn find_end_block(&mut self) -> Result<()> {
@@ -109,7 +109,7 @@ impl<R: std::io::Read> NexusImporter<R> {
         if token.eq_ignore_ascii_case("DIMENSIONS") {
             let token2 = self.read_token("=;")?;
             if !token2.eq_ignore_ascii_case("NTAX") {
-                panic!("missing ntax tag".to_string())
+                panic!("missing ntax tag")
             };
             taxa_count = self.read_int(";")?;
         };
@@ -120,7 +120,7 @@ impl<R: std::io::Read> NexusImporter<R> {
                 if !taxa.is_empty() {
                     let uniq = self.taxa.insert(taxa.to_string());
                     if !uniq {
-                        panic!("duplicated taxa:".to_string() + &*taxa)
+                        panic!("duplicated taxa: {}", &*taxa)
                     }
                 }
                 if self.last_deliminator == b';' {
@@ -128,7 +128,7 @@ impl<R: std::io::Read> NexusImporter<R> {
                 }
             };
             if taxa_count != self.taxa.len() {
-                panic!("taxa count does not match ntax tag".to_string())
+                panic!("taxa count does not match ntax tag")
             };
             debug!("read taxa block with {} taxa", taxa_count);
             Ok(())
@@ -147,12 +147,12 @@ impl<R: std::io::Read> NexusImporter<R> {
             loop {
                 let key = self.read_token(",;")?;
                 if self.last_deliminator == b',' || self.last_deliminator == b';' {
-                    break Err(IoError::FORMAT("missing taxon label in translate section of trees block".to_string()));
+                    break Err(IoError::Format("missing taxon label in translate section of trees block".to_string()));
                 } else {
                     let taxon = self.read_token(",;")?;
                     //TODO build from Taxa block if needed
                     if let Some(key) = taxa_map.insert(key, taxon) {
-                        break Err(IoError::FORMAT("translate map uses ".to_string() + &key + "twice"));
+                        break Err(IoError::Format("translate map uses ".to_string() + &key + "twice"));
                     }
                 }
                 if self.last_deliminator == b';' {
@@ -171,8 +171,7 @@ impl<R: std::io::Read> NexusImporter<R> {
     fn read_internal_node(&mut self) -> Result<TreeIndex> {
          self.read_byte()?;
         //assert =='('
-        let mut children = vec![];
-        children.push(self.read_branch()?);
+        let mut children = vec![self.read_branch()?];
 
         // read subsequent children
         while self.last_deliminator == b',' {
@@ -352,8 +351,8 @@ impl<R: std::io::Read> NexusImporter<R> {
             None => {
                 match self.reader.read(&mut buf) {
                     Ok(1) => Ok(buf[0]),
-                    Ok(0) => Err(IoError::EOF),
-                    _ => Err(IoError::OTHER)
+                    Ok(0) => Err(IoError::Eof),
+                    _ => Err(IoError::Other)
                 }
             }
             Some(c) => {
@@ -442,7 +441,7 @@ impl<R: std::io::Read> TreeImporter<R> for NexusImporter<R> {
             }
 
             if self.next_byte()? != b'(' {
-                panic!("Missing tree definition in TREE command of TREES block".to_string())
+                panic!("{}","Missing tree definition in TREE command of TREES block".to_string())
             } else {
                 let rooted_comment = self.last_annotation.take();
                 let root = self.read_internal_node()?;
@@ -452,7 +451,7 @@ impl<R: std::io::Read> TreeImporter<R> for NexusImporter<R> {
                 self.get_tree().set_id(label);
 
                 match self.last_deliminator {
-                    b')' => Err(IoError::FORMAT("Tree parsing ended with ')'".to_string())),
+                    b')' => Err(IoError::Format("Tree parsing ended with ')'".to_string())),
                     b';' => {
                         trace!(
                             "Tree parsed in {} milli seconds ",
@@ -471,13 +470,13 @@ impl<R: std::io::Read> TreeImporter<R> for NexusImporter<R> {
                         self.read_token(";")?;
                         Ok(self.tree.take().unwrap())
                     }
-                    _ => Err(IoError::FORMAT("You may need to read to check for a root branch or annotation".to_string()))
+                    _ => Err(IoError::Format("You may need to read to check for a root branch or annotation".to_string()))
                 }
             }
         } else if self.last_token.eq_ignore_ascii_case("ENDBLOCK") || self.last_token.eq_ignore_ascii_case("END") {
-            Err(IoError::EOF)
+            Err(IoError::Eof)
         } else {
-            Err(IoError::FORMAT(String::from("unknown command in tree block") + &*self.last_token))
+            Err(IoError::Format(String::from("unknown command in tree block") + &*self.last_token))
         }
     }
 }
@@ -493,7 +492,7 @@ impl<R: std::io::Read> Iterator for NexusImporter<R> {
             true => {
                 match self.read_next_tree() {
                     Ok(node) => Some(node),
-                    Err(IoError::EOF) => None,
+                    Err(IoError::Eof) => None,
                     Err(e) => panic!("parsing error {}", e),
                 }
             }

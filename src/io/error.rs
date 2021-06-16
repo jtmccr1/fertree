@@ -3,10 +3,10 @@ use std::error::Error;
 
 #[derive(Debug, Clone)]
 pub enum IoError{
-    EOF,
-    FORMAT(String),
+    Eof,
+    Format(String),
     DuplicateTaxon(String),
-    OTHER,
+    Other,
 }
 impl Error for IoError{}
 impl fmt::Display for IoError {
