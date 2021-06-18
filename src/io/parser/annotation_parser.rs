@@ -1,5 +1,6 @@
 use pest_consume::{match_nodes, Error, Parser};
 use crate::tree::AnnotationValue;
+use crate::tree::MarkovJump;
 use std::collections::HashMap;
 
 
@@ -49,10 +50,15 @@ impl AnnotationParser {
 
     fn key(input: Node) -> PestResult<String> {
         Ok(match_nodes!(input.into_children();
-        [unquoted_name(n)]=>n,
+        [unquoted_key(n)]=>n,
         [quoted_name(n)]=>n,
       ))
     }
+    fn unquoted_key(input: Node) -> PestResult<String> {
+        let name = input.as_str();
+        Ok(name.to_string())
+    }
+
     fn unquoted_name(input: Node) -> PestResult<String> {
         let name = input.as_str();
         Ok(name.to_string())
@@ -81,7 +87,8 @@ impl AnnotationParser {
     fn one_entry(input: Node) -> PestResult<AnnotationValue> {
         Ok(match_nodes!(input.into_children();
             [continuous(n)]=>n,
-            [discrete(n)]=>n
+            [discrete(n)]=>n,
+            [markovjump(n)]=>n
         ))
     }
     fn continuous(input: Node) -> PestResult<AnnotationValue> {
@@ -105,6 +112,26 @@ impl AnnotationParser {
         );
         Ok(AnnotationValue::Set(set))
     }
+
+    fn markovjump(input:Node)->PestResult<AnnotationValue>{
+        Ok(match_nodes!(input.into_children();
+        [continuous(t),discrete(s),discrete(d)]=>{
+                let mut mj_time = None;
+                let mut mj_source = None;
+                let mut mj_dest = None;
+                if let  AnnotationValue::Continuous(time) =t {
+                    mj_time = Some(time);
+                }
+                if let AnnotationValue::Discrete(source) = s  {
+                    mj_source = Some(source.clone());
+                }
+                 if let AnnotationValue::Discrete(dest) =d {
+                    mj_dest = Some(dest.clone());
+                }
+                AnnotationValue::MarkovJump(MarkovJump{time:mj_time.unwrap(),source:mj_source.unwrap(),destination:mj_dest.unwrap()})
+            }
+      ))
+    }
 }
 
 impl AnnotationParser {
@@ -120,6 +147,7 @@ impl AnnotationParser {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tree::MarkovJump;
 
     #[test]
     fn discrete() {
@@ -143,10 +171,24 @@ mod tests {
         assert_eq!(AnnotationParser::parse_annotation("[&'location'=UK]").unwrap(), exp);
     }
     #[test]
+    fn just_rooted() {
+        let mut exp = HashMap::new();
+        exp.insert("R".to_owned(), AnnotationValue::Boolean(true));
+        assert_eq!(AnnotationParser::parse_annotation("[&R]").unwrap(), exp);
+    }
+
+    #[test]
     fn multiple_commnet() {
         let mut exp = HashMap::new();
-        exp.insert("location".to_owned(), AnnotationValue::Discrete("UK".to_owned()));
+        exp.insert("location[1]".to_owned(), AnnotationValue::Discrete("UK".to_owned()));
         exp.insert("lat".to_owned(), AnnotationValue::Continuous(0.0));
-        assert_eq!(AnnotationParser::parse_annotation("[&location=UK,lat=0.0]").unwrap(), exp);
+        assert_eq!(AnnotationParser::parse_annotation("[&location[1]=UK,lat=0.0]").unwrap(), exp);
+    }
+    #[test]
+    fn markov_jump() {
+        let parsed = AnnotationParser::parse_annotation("[&location={{0.5,UK,US}}]").unwrap();
+        let mut exp = HashMap::new();
+        exp.insert("location".to_owned(),AnnotationValue::Set(vec![AnnotationValue::MarkovJump(MarkovJump{time:0.5,source:"UK".to_string(),destination:"US".to_string()})]));
+        assert_eq!(parsed, exp);
     }
 }

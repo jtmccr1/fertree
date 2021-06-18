@@ -4,6 +4,7 @@ use std::collections::hash_map::Keys;
 use std::collections::{HashMap, HashSet};
 use std::option::Option;
 use std::cmp::Ordering;
+use crate::tree::MarkovJump;
 
 pub type TreeIndex = usize;
 
@@ -560,6 +561,9 @@ impl MutableTree {
                         key.clone(),
                         AnnotationValue::Set(vec![AnnotationValue::Discrete("0".to_string())]),
                     );
+                },
+                AnnotationValue::MarkovJump(_) => {
+                    panic!("Markov jumps must be in sets of annotations not single.");
                 }
             }
             let node = self.get_unwrapped_node_mut(index);

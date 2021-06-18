@@ -696,8 +696,8 @@ pub mod transmission_lineage {
                             parent_tmrca: tree.get_height(parent).unwrap(),
                             id,
                             source:parent_location.to_string(),
-                            first_seen:f64::INFINITY,
-                            last_seen:f64::NEG_INFINITY
+                            first_seen:f64::NEG_INFINITY,
+                            last_seen:f64::INFINITY
                         };
                         self.lineages.push(new_lineage);
                         if tree.is_external(node) {
@@ -725,8 +725,8 @@ pub mod transmission_lineage {
                         parent_tmrca: f32::NEG_INFINITY as f64,
                         id,
                         source:child_annotation.to_string(),
-                        first_seen:f64::INFINITY,
-                        last_seen:f64::NEG_INFINITY
+                        first_seen:f64::NEG_INFINITY,
+                        last_seen:f64::INFINITY
                     };
                     self.lineages.push(new_lineage);
                     for child in tree.get_children(node) {
@@ -747,7 +747,7 @@ pub mod transmission_lineage {
         if taxa_flag {
             writeln!(handle, "tree\tlineage\ttaxa\ttmrca\tptmrca\tsource")?;
         }else{
-            writeln!(handle, "tree\tlineage\tntaxa\ttmrca\tptmrca\tsource")?;
+            writeln!(handle, "tree\tlineage\tntaxa\ttmrca\tptmrca\tsource\tfirst_seen\tlast_seen")?;
         }
         let mut count = 0;
         let mut lineage_finder = LineageFinder::new(key, AnnotationValue::Discrete(value));
@@ -761,7 +761,7 @@ pub mod transmission_lineage {
                         writeln!(handle, "{}\t{}\t{}\t{}\t{}\t{}", count, l.id, taxa, l.tmrca, l.parent_tmrca, l.source)?;
                     }
                 }else{
-                    writeln!(handle, "{}\t{}\t{}\t{}\t{}\t{}", count, l.id, l.taxa.len(), l.tmrca, l.parent_tmrca, l.source)?;
+                    writeln!(handle, "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", count, l.id, l.taxa.len(), l.tmrca, l.parent_tmrca, l.source,l.first_seen,l.last_seen,)?;
                 }
             }
             count+=1;

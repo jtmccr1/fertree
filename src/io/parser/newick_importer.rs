@@ -243,7 +243,7 @@ impl<R: std::io::Read> NewickImporter<R> {
             self.last_annotation = Some(annotation);
             Ok(())
         } else {
-            panic!("Error parsing annotation")
+            panic!("Error parsing annotation: {}",comment)
         }
     }
 
@@ -374,6 +374,13 @@ mod tests {
     #[test]
     fn comment() {
         assert!(NewickImporter::read_tree(BufReader::new("(a[&test=ok],b:1);".as_bytes())).is_ok());
+    }
+    #[test]
+    fn branch_comment() {
+        let t = NewickImporter::read_tree(BufReader::new("(a[&test=ok],b:[&jump={{0.1,U,me}}]1);".as_bytes())).unwrap();
+        let mj = t.get_annotation(1, "jump");
+        let a = t.get_annotation(0, "test");
+        assert!(NewickImporter::read_tree(BufReader::new("(a[&test=ok],b:[&jump={{0.1,U,me}}]1);".as_bytes())).is_ok());
     }
 
     #[test]

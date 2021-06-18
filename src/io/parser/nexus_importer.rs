@@ -332,7 +332,7 @@ impl<R: std::io::Read> NexusImporter<R> {
 
         match s.parse() {
             Ok(l) => Ok(l),
-            Err(e) => panic!("{}",e)
+            Err(e) => panic!("{} : {}",e,s)
         }
     }
     fn read_int(&mut self, deliminator: &str) -> Result<usize> {
@@ -387,7 +387,7 @@ impl<R: std::io::Read> NexusImporter<R> {
             self.last_annotation = Some(annotation);
             Ok(())
         } else {
-            panic!("Error parsing annotation")
+            panic!("Error parsing annotation {}", comment)
         }
     }
 
