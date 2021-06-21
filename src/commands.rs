@@ -632,6 +632,9 @@ pub mod transmission_lineage {
     use rebl::tree::AnnotationValue;
     use rebl::tree::mutable_tree::MutableTree;
     use std::io::Write;
+    use std::path;
+    use crate::commands::command_io;
+    use std::collections::HashSet;
 
     #[derive(Debug)]
     struct TransmissionLineage {
@@ -649,10 +652,11 @@ pub mod transmission_lineage {
             let taxa = tree.get_taxon(node).unwrap().to_string();
             self.taxa.push(taxa);
             let height = tree.get_height(node).expect("You need to calculate heights before making lineages");
-            if height< self.last_seen{
+            let rt_height = tree.get_height(tree.get_root().unwrap()).unwrap();
+            if (rt_height -height).abs()> self.last_seen{
                 self.last_seen=height;
             }
-            if height> self.first_seen{
+            if (rt_height -height).abs()< self.first_seen{
                 self.first_seen=height;
             }
         }
@@ -662,53 +666,75 @@ pub mod transmission_lineage {
         lineages: Vec<TransmissionLineage>,
         key: String,
         value: AnnotationValue,
+        ignore_taxa: HashSet<String>,
+        cutoff: f64,
         //TODO ignore tips without annotations?
+
     }
 
 
     impl LineageFinder {
-        fn new(key:String,value :AnnotationValue)->Self{
-            LineageFinder{lineages:vec![],key,value}
+        fn new(key:String,value :AnnotationValue,ignore_taxa:HashSet<String>,cutoff:f64)->Self{
+            LineageFinder{lineages:vec![],key,value,ignore_taxa,cutoff}
         }
         fn clear(&mut self){
             self.lineages = vec![];
         }
         fn find_lineages(&mut self, tree: &MutableTree, node: usize, lineage_index: Option<usize>) {
-            if let Some(parent) = tree.get_parent(node) {
+            if let Some(mut parent) = tree.get_parent(node) {
                 let child_annotation = tree.get_annotation(node, &self.key).unwrap();
 
                 if child_annotation == &self.value {
                     if let Some(li) = lineage_index { // parent was in this lineage
                         if tree.is_external(node) {
-                            let l = & mut self.lineages[li];
-                            l.add_taxa(tree, node);
+                            let taxa = tree.get_taxon(node).expect("tip should have a taxon");
+                            if !self.ignore_taxa.contains(taxa) { // if we are not ignoring this tip
+                                let l = & mut self.lineages[li];
+                                l.add_taxa(tree, node);
+                            }
                         } else {
                             for child in tree.get_children(node) {
                                 self.find_lineages(tree, child, lineage_index);
                             }
                         }
-                    } else { // new lineage
+                    } else if tree.get_height(node).expect("nodes should have heights")>=self.cutoff{
+                        // new lineage
+
                         let id = self.lineages.len();
-                        let parent_location = tree.get_annotation(parent,&self.key).unwrap();
+                        let mut parent_location = tree.get_annotation(parent,&self.key).unwrap();
+                        // if parent is in the same location assert it was passed up because of the
+                        //height cutoff and go back to root or first parent with location not here
+
+                        while parent_location==&self.value{
+                            parent = tree.get_parent(parent).expect("Hit the root looking for ancestor location");
+                            parent_location = tree.get_annotation(parent,&self.key).unwrap();
+                        }
+
                         let new_lineage = TransmissionLineage {
                             taxa: vec![],
                             tmrca: tree.get_height(node).unwrap(),
                             parent_tmrca: tree.get_height(parent).unwrap(),
                             id,
                             source:parent_location.to_string(),
-                            first_seen:f64::NEG_INFINITY,
-                            last_seen:f64::INFINITY
+                            first_seen:f64::INFINITY,
+                            last_seen:f64::NEG_INFINITY
                         };
                         self.lineages.push(new_lineage);
                         if tree.is_external(node) {
-                            let l = &mut self.lineages[id];
-                            l.add_taxa(tree, node);
+                            let taxa = tree.get_taxon(node).expect("tip should have an associated taxon");
+                            if !self.ignore_taxa.contains(taxa) { // if we are not ignoring this tip
+                                let l = &mut self.lineages[id];
+                                l.add_taxa(tree, node);
+                            }
                         } else {
                             for child in tree.get_children(node) {
                                 self.find_lineages(tree, child, Some(id));
                             }
                         }
+                    }else if tree.is_external(node){
+                        warn!("tip {} was passed over because it is was sampled before the first accepted time {}",tree.get_height(node).expect("expected height"),self.cutoff)
                     }
+
                 } else {
                     for child in tree.get_children(node) {
                         self.find_lineages(tree, child, None);
@@ -724,9 +750,9 @@ pub mod transmission_lineage {
                         tmrca: tree.get_height(node).unwrap(),
                         parent_tmrca: f32::NEG_INFINITY as f64,
                         id,
-                        source:child_annotation.to_string(),
-                        first_seen:f64::NEG_INFINITY,
-                        last_seen:f64::INFINITY
+                        source:"NA (at-root)".to_string(),
+                        first_seen:f64::INFINITY,
+                        last_seen:f64::NEG_INFINITY
                     };
                     self.lineages.push(new_lineage);
                     for child in tree.get_children(node) {
@@ -741,31 +767,39 @@ pub mod transmission_lineage {
         }
     }
 
-    pub fn run<R: std::io::Read, T: TreeImporter<R>>(mut trees: T, key: String, value: String,taxa_flag:bool) -> Result<(), Box<dyn Error>> {
+    pub fn run<R: std::io::Read, T: TreeImporter<R>>(mut trees: T, ignore_taxa: Option<path::PathBuf>, key: String, value: String, taxa_flag:bool, origin: Option<f64>, cutoff:Option<f64>) -> Result<(), Box<dyn Error>> {
+        let ignore = command_io::parse_taxa(ignore_taxa)?;
         let stdout = std::io::stdout(); // get the global stdout entity
         let mut handle = stdout.lock(); // acquire a lock on it
         if taxa_flag {
-            writeln!(handle, "tree\tlineage\ttaxa\ttmrca\tptmrca\tsource")?;
+            writeln!(handle, "tree\tlineage\tntaxa\ttmrca\tptmrca\tsource\tfirst_seen\tlast_seen\ttaxa")?;
         }else{
             writeln!(handle, "tree\tlineage\tntaxa\ttmrca\tptmrca\tsource\tfirst_seen\tlast_seen")?;
         }
         let mut count = 0;
-        let mut lineage_finder = LineageFinder::new(key, AnnotationValue::Discrete(value));
+        let most_recent_intro = cutoff.unwrap_or(f64::NEG_INFINITY);
+
+        let mut lineage_finder = LineageFinder::new(key, AnnotationValue::Discrete(value), ignore, most_recent_intro);
         while trees.has_tree() {
+
             let mut tree = trees.read_next_tree()?;
-            tree.calc_node_heights();
+
+            if let Some(most_recent_sample) = origin{
+                tree.calc_relative_node_heights(most_recent_sample);
+            }else{
+                tree.calc_node_heights();
+            }
             lineage_finder.find_lineages(&tree, tree.get_root().unwrap(), None);
             for l in &lineage_finder.lineages{
                 if taxa_flag {
-                    for taxa in &l.taxa {
-                        writeln!(handle, "{}\t{}\t{}\t{}\t{}\t{}", count, l.id, taxa, l.tmrca, l.parent_tmrca, l.source)?;
-                    }
+                    writeln!(handle, "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", count, l.id, l.taxa.len(), l.tmrca, l.parent_tmrca, l.source,l.first_seen,l.last_seen,l.taxa.join("; "))?;
                 }else{
                     writeln!(handle, "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", count, l.id, l.taxa.len(), l.tmrca, l.parent_tmrca, l.source,l.first_seen,l.last_seen,)?;
                 }
             }
             count+=1;
             lineage_finder.clear()
+
         }
         Ok(())
     }
@@ -775,6 +809,7 @@ pub mod transmission_lineage {
         use std::io::BufReader;
         use crate::commands::transmission_lineage::LineageFinder;
         use rebl::tree::AnnotationValue;
+        use std::collections::HashSet;
 
         #[test]
         fn find_lineages(){
@@ -782,7 +817,7 @@ pub mod transmission_lineage {
             let mut tree = NewickImporter::read_tree(BufReader::new(s.as_bytes())).expect("error in parsing");
             //TODO work this into Lineage Finder
             tree.calc_node_heights();
-            let mut lf = LineageFinder::new("location".to_string(),AnnotationValue::Discrete("UK".to_string()));
+            let mut lf = LineageFinder::new("location".to_string(),AnnotationValue::Discrete("UK".to_string()),HashSet::new(),f64::NEG_INFINITY);
 
             lf.find_lineages(&tree, tree.get_root().unwrap(), None);
             assert_eq!(1, lf.lineages.len());
@@ -794,7 +829,7 @@ pub mod transmission_lineage {
             let mut tree = NewickImporter::read_tree(BufReader::new(s.as_bytes())).expect("error in parsing");
             //TODO work this into Lineage Finder
             tree.calc_node_heights();
-            let mut lf = LineageFinder::new("location".to_string(),AnnotationValue::Discrete("US".to_string()));
+            let mut lf = LineageFinder::new("location".to_string(),AnnotationValue::Discrete("US".to_string()),HashSet::new(),f64::NEG_INFINITY);
 
             lf.find_lineages(&tree, tree.get_root().unwrap(), None);
             assert_eq!(2, lf.lineages.len());
@@ -1030,6 +1065,8 @@ pub mod command_io {
     use std::error::Error;
     use std::fs::File;
     use std::path;
+    use std::collections::HashSet;
+    use std::io::{BufReader, BufRead};
 
     //HashMap<String,HashMap<String,AnnotationValue>>
     pub fn parse_tsv(trait_file: &path::Path) -> Result<Reader<File>, Box<dyn Error>> {
@@ -1045,4 +1082,24 @@ pub mod command_io {
 
         Ok(rdr)
     }
+
+    //HashMap<String,HashMap<String,AnnotationValue>>
+    pub fn parse_taxa(taxa_file: Option<path::PathBuf>) -> Result<HashSet<String>, Box<dyn Error>> {
+       Ok( match taxa_file {
+            None => {HashSet::new()}
+            Some(f) => {
+                let mut taxa = HashSet::new();
+                let file = File::open(f)?;
+                let reader = BufReader::new(file);
+
+                for line in reader.lines() {
+                    taxa.insert(line?.trim().to_string());
+                }
+                debug!("{} taxa to ignore", taxa.len() );
+                taxa
+            }
+        }
+       )
+    }
+
 }

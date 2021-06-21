@@ -82,6 +82,9 @@ enum Fertree {
     },
     ///Identify transmission lineages on a fully annotated tree
     TransmissionLineages{
+
+        #[structopt( long, parse(from_os_str), help = "file of taxa to ignore", global = true)]
+        ignore_taxa: Option<path::PathBuf>,
         #[structopt(
         short,
         long,
@@ -94,8 +97,13 @@ enum Fertree {
         help = "the deme for which introductions are being labeled"
         )]
         to: String,
-        #[structopt(short, long, help = "output one row for each taxa")]
+        #[structopt(long, help = "Include a semicolon separated list of the taxa in each introduction")]
         taxa: bool,
+        #[structopt(short, long, help = "most recent time of sampling used to calculate node heights in time. defaults to 0 with heights increasing towards the root. ")]
+        origin:Option<f64>,
+        #[structopt(short,long,help="the earliest time allowed for an introduction. \
+        Any inferred introduction before this time will be passed down to children until an node with an acceptable time is found.")]
+        cutoff:Option<f64>
     }
 }
 
@@ -167,6 +175,6 @@ fn run_commands<R:std::io::Read,T:TreeImporter<R>>(tree_importer: T, cmd:Fertree
             relaxed,
         } => split::run(tree_importer, min_size, explore, !relaxed),
         Fertree::Resolve { cmd } => resolve::run(tree_importer, cmd),
-        Fertree::TransmissionLineages{key,to,taxa}=>transmission_lineage::run(tree_importer,key,to,taxa),
+        Fertree::TransmissionLineages{key,ignore_taxa,to,taxa,origin,cutoff}=>transmission_lineage::run(tree_importer,ignore_taxa,key,to,taxa,origin,cutoff),
     }
 }

@@ -4,7 +4,6 @@ use std::collections::hash_map::Keys;
 use std::collections::{HashMap, HashSet};
 use std::option::Option;
 use std::cmp::Ordering;
-use crate::tree::MarkovJump;
 
 pub type TreeIndex = usize;
 
@@ -233,6 +232,26 @@ impl MutableTree {
                 i += 1;
             }
         }
+    }
+
+    pub fn calc_relative_node_heights(&mut self,origin:f64) {
+            self.heights_known = true;
+            self.calc_height_above_root();
+            let mut rtt = 0.0;
+            for node_ref in self.external_nodes.iter() {
+                let h = self.get_height(*node_ref).unwrap();
+                if h > rtt {
+                    rtt = h;
+                }
+            }
+
+            let mut i = 0;
+            while i < self.nodes.len() {
+                let height = origin-(rtt - self.get_height(i).unwrap());
+                self.set_height(i, height);
+                i += 1;
+            }
+
     }
 
     pub fn calculate_branchlengths(&mut self) {
