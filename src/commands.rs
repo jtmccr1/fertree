@@ -653,10 +653,10 @@ pub mod transmission_lineage {
             self.taxa.push(taxa);
             let height = tree.get_height(node).expect("You need to calculate heights before making lineages");
             let rt_height = tree.get_height(tree.get_root().unwrap()).unwrap();
-            if (rt_height -height).abs()> self.last_seen{
+            if (rt_height -height).abs()> (rt_height -self.last_seen).abs() {
                 self.last_seen=height;
             }
-            if (rt_height -height).abs()< self.first_seen{
+            if (rt_height -height).abs()< (rt_height -self.first_seen).abs(){
                 self.first_seen=height;
             }
         }
@@ -716,8 +716,8 @@ pub mod transmission_lineage {
                             parent_tmrca: tree.get_height(parent).unwrap(),
                             id,
                             source:parent_location.to_string(),
-                            first_seen:f64::INFINITY,
-                            last_seen:f64::NEG_INFINITY
+                            first_seen:0.0,
+                            last_seen:tree.get_height(tree.get_root().unwrap()).unwrap()
                         };
                         self.lineages.push(new_lineage);
                         if tree.is_external(node) {
@@ -748,11 +748,11 @@ pub mod transmission_lineage {
                     let new_lineage = TransmissionLineage {
                         taxa: vec![],
                         tmrca: tree.get_height(node).unwrap(),
-                        parent_tmrca: f32::NEG_INFINITY as f64,
+                        parent_tmrca: f64::NEG_INFINITY,
                         id,
                         source:"NA (at-root)".to_string(),
-                        first_seen:f64::INFINITY,
-                        last_seen:f64::NEG_INFINITY
+                        first_seen:0.0,
+                        last_seen:tree.get_height(tree.get_root().unwrap()).unwrap()
                     };
                     self.lineages.push(new_lineage);
                     for child in tree.get_children(node) {
