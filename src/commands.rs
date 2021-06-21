@@ -635,6 +635,7 @@ pub mod transmission_lineage {
     use std::path;
     use crate::commands::command_io;
     use std::collections::HashSet;
+    use scoped_threadpool::Pool;
 
     #[derive(Debug)]
     struct TransmissionLineage {
@@ -779,28 +780,35 @@ pub mod transmission_lineage {
         let mut count = 0;
         let most_recent_intro = cutoff.unwrap_or(f64::NEG_INFINITY);
 
-        let mut lineage_finder = LineageFinder::new(key, AnnotationValue::Discrete(value), ignore, most_recent_intro);
-        while trees.has_tree() {
+        let mut pool = Pool::new(4);
 
-            let mut tree = trees.read_next_tree()?;
+        pool.scoped(|scope| {
+            for mut tree in trees {
+                scope.execute(move || {
+                // let mut tree = trees.read_next_tree()?;
+                //TODO don't clone
+                let  mut lineage_finder = LineageFinder::new(key.clone(), AnnotationValue::Discrete(value.clone()), ignore.clone(), most_recent_intro);
 
-            if let Some(most_recent_sample) = origin{
-                tree.calc_relative_node_heights(most_recent_sample);
-            }else{
-                tree.calc_node_heights();
-            }
-            lineage_finder.find_lineages(&tree, tree.get_root().unwrap(), None);
-            for l in &lineage_finder.lineages{
-                if taxa_flag {
-                    writeln!(handle, "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", count, l.id, l.taxa.len(), l.tmrca, l.parent_tmrca, l.source,l.first_seen,l.last_seen,l.taxa.join("; "))?;
+                if let Some(most_recent_sample) = origin{
+                    tree.calc_relative_node_heights(most_recent_sample);
                 }else{
-                    writeln!(handle, "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", count, l.id, l.taxa.len(), l.tmrca, l.parent_tmrca, l.source,l.first_seen,l.last_seen,)?;
+                    tree.calc_node_heights();
                 }
+                lineage_finder.find_lineages(&tree, tree.get_root().unwrap(), None);
+                // for l in &lineage_finder.lineages{
+                //     if taxa_flag {
+                //         writeln!(handle, "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", count, l.id, l.taxa.len(), l.tmrca, l.parent_tmrca, l.source,l.first_seen,l.last_seen,l.taxa.join("; ")).unwrap();
+                //     }else{
+                //         writeln!(handle, "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", count, l.id, l.taxa.len(), l.tmrca, l.parent_tmrca, l.source,l.first_seen,l.last_seen,).unwrap();
+                //     }
+                // }
+                count+=1;
+                // lineage_finder.clear()
+            });
             }
-            count+=1;
-            lineage_finder.clear()
 
-        }
+        });
+
         Ok(())
     }
     #[cfg(test)]
