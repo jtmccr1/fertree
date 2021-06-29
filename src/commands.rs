@@ -702,7 +702,7 @@ pub mod transmission_lineage {
                         let mut parent_location = tree.get_annotation(parent, &self.key).unwrap();
                         // if parent is in the same location assert it was passed up because of the
                         //height cutoff and go back to root or first parent with location not here
-
+                        let parent_height = tree.get_height(parent).unwrap();
                         while parent_location == &self.value {
                             parent = tree.get_parent(parent).expect("Hit the root looking for ancestor location");
                             parent_location = tree.get_annotation(parent, &self.key).unwrap();
@@ -711,7 +711,7 @@ pub mod transmission_lineage {
                         let new_lineage = TransmissionLineage {
                             taxa: vec![],
                             tmrca: tree.get_height(node).unwrap(),
-                            parent_tmrca: tree.get_height(parent).unwrap(),
+                            parent_tmrca: parent_height,
                             id,
                             source: parent_location.to_string(),
                             first_seen: 0.0,
