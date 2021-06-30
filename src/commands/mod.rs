@@ -5,6 +5,7 @@ pub mod resolve;
 pub mod split;
 pub mod stats;
 pub mod transmission_lineage;
+pub mod branchlengths;
 
 pub mod command_io {
     use csv::Reader;

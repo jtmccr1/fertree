@@ -109,7 +109,12 @@ enum Fertree {
         between any ancestor in the deme and the next sample. Any introduction with lag grater than \
         this limit is split into introductions that respect the lag are found.")]
         lag:Option<f64>
-    }
+    },
+    /// Commands to modify branch lengths
+    Brlen {
+        #[structopt(subcommand)]
+        cmd: commands::branchlengths::SubCommands
+}
 }
 
 #[derive(Debug, StructOpt)]
@@ -180,6 +185,7 @@ fn run_commands<R:std::io::Read,T:TreeImporter<R>>(tree_importer: T, cmd:Fertree
             relaxed,
         } => commands::split::run(tree_importer, min_size, explore, !relaxed),
         Fertree::Resolve { cmd } => commands::resolve::run(tree_importer, cmd),
+        Fertree::Brlen { cmd } => commands::branchlengths::run(tree_importer, cmd),
         Fertree::TransmissionLineages{key,ignore_taxa,to,taxa,origin,cutoff,lag}=>commands::transmission_lineage::run(tree_importer,ignore_taxa,key,to,taxa,origin,cutoff,lag),
     }
 }

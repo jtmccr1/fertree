@@ -447,6 +447,11 @@ impl<R: std::io::Read> TreeImporter<R> for NexusImporter<R> {
                 let rooted_comment = self.last_annotation.take();
                 let root = self.read_internal_node()?;
 
+                if self.last_deliminator == b':' {
+                    let length = self.read_double(",():;")?;
+                    warn!("Root lengths are ignored");
+                }
+
                 self.get_tree().set_root(Some(root));
                 self.get_tree().branchlengths_known = true;
                 self.get_tree().set_id(label);
@@ -519,7 +524,19 @@ mod tests {
         let tree = NexusImporter::read_tree(BufReader::new(nexus.as_bytes()));
         assert!(tree.is_ok())
     }
-
+    #[test]
+    fn test_root_lenght_and_id() {
+        let nexus = "#NEXUS
+        BEGIN TAXA;
+        DIMENSIONS NTAX=4;
+        TAXLABELS Tip0 Tip1 Tip2 Tip3;
+        END;
+        BEGIN TREES;
+        TREE tree0 = (Tip0:0.10948830688813957,Tip1:0.08499321350697361,(Tip2:0.17974073029346938,Tip3:0.1702835785780057):0.19361872371858507)root:1.0;
+        END;";
+        let tree = NexusImporter::read_tree(BufReader::new(nexus.as_bytes()));
+        assert!(tree.is_ok())
+    }
     #[test]
     fn iterator() {
         let nexus = "#NEXUS

@@ -302,6 +302,12 @@ impl<R: std::io::Read> TreeImporter<R> for NewickImporter<R> {
         self.unread_byte(b'(');
 
         let root = self.read_internal_node()?;
+        if self.last_deliminator == b':' {
+            let length = self.read_double(",():;")?;
+            warn!("Root lengths are ignored");
+        }
+
+        // self.get_tree().set_length(branch, length);
         //TODO hide node/node ref api
         self.get_tree().set_root(Some(root));
         self.get_tree().branchlengths_known = true;
@@ -391,6 +397,16 @@ mod tests {
     #[test]
     fn whitespace() {
         assert!(NewickImporter::read_tree(BufReader::new("  (a,b:1);\t".as_bytes())).is_ok());
+    }
+
+    #[test]
+    fn node_id() {
+        assert!(NewickImporter::read_tree(BufReader::new("((A,T)Node_1:1,(a,b:1));".as_bytes())).is_ok());
+    }
+
+    #[test]
+    fn root_length_and_label() {
+        assert!(NewickImporter::read_tree(BufReader::new("((A,T)Node_1:1,(a,b:1))root:0.1;".as_bytes())).is_ok());
     }
 
     #[test]

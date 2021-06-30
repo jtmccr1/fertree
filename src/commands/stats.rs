@@ -56,7 +56,7 @@ fn nodes<R: std::io::Read, T: TreeImporter<R>>(mut trees: T) -> Result<(), Box<d
             let height = tree.get_height(i).expect("Heights should be calculated");
             let mut length = f64::NAN;
             if let Some(p) = tree.get_parent(i) {
-                length = tree.get_height(p).expect("Hieghts should be calculated") - height;
+                length = tree.get_height(p).expect("Heights should be calculated") - height;
             }
             writeln!(handle, "{}\t{}\t{}\t{}", t, height, length, taxa)?;
         }

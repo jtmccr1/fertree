@@ -77,6 +77,9 @@ impl AnnotationParser {
         let name = input.as_str();
         Ok(name.to_string())
     }
+    fn empty_string(input:Node)->PestResult<String>{
+        Ok(String::new())
+    }
     fn value(input: Node) -> PestResult<AnnotationValue> {
         Ok(match_nodes!(input.into_children();
             [continuous(n)]=>n,
@@ -104,6 +107,7 @@ impl AnnotationParser {
         Ok(match_nodes!(input.into_children();
         [unquoted_name(n)]=>AnnotationValue::Discrete(n),
         [quoted_name(n)]=>AnnotationValue::Discrete(n),
+        [empty_string(n)]=>AnnotationValue::Discrete(n)
       ))
     }
     fn set(input: Node) -> PestResult<AnnotationValue> {
@@ -113,7 +117,7 @@ impl AnnotationParser {
         Ok(AnnotationValue::Set(set))
     }
 
-    fn markovjump(input:Node)->PestResult<AnnotationValue>{
+    fn markovjump(input: Node) -> PestResult<AnnotationValue> {
         Ok(match_nodes!(input.into_children();
         [continuous(t),discrete(s),discrete(d)]=>{
                 let mut mj_time = None;
@@ -165,11 +169,19 @@ mod tests {
     }
 
     #[test]
+    fn empty_quotes() {
+        let mut exp = HashMap::new();
+        exp.insert("location".to_owned(), AnnotationValue::Discrete("".to_owned()));
+        assert_eq!(AnnotationParser::parse_annotation("[&location=\"\"]").unwrap(), exp);
+    }
+
+    #[test]
     fn quoted_key() {
         let mut exp = HashMap::new();
         exp.insert("location".to_owned(), AnnotationValue::Discrete("UK".to_owned()));
         assert_eq!(AnnotationParser::parse_annotation("[&'location'=UK]").unwrap(), exp);
     }
+
     #[test]
     fn just_rooted() {
         let mut exp = HashMap::new();
@@ -184,11 +196,12 @@ mod tests {
         exp.insert("lat".to_owned(), AnnotationValue::Continuous(0.0));
         assert_eq!(AnnotationParser::parse_annotation("[&location[1]=UK,lat=0.0]").unwrap(), exp);
     }
+
     #[test]
     fn markov_jump() {
         let parsed = AnnotationParser::parse_annotation("[&location={{0.5,UK,US}}]").unwrap();
         let mut exp = HashMap::new();
-        exp.insert("location".to_owned(),AnnotationValue::Set(vec![AnnotationValue::MarkovJump(MarkovJump{time:0.5,source:"UK".to_string(),destination:"US".to_string()})]));
+        exp.insert("location".to_owned(), AnnotationValue::Set(vec![AnnotationValue::MarkovJump(MarkovJump { time: 0.5, source: "UK".to_string(), destination: "US".to_string() })]));
         assert_eq!(parsed, exp);
     }
 }

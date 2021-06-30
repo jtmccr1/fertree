@@ -13,14 +13,15 @@ single_inner={(!("\'")~ANY)+}
 double_inner={(!("\"")~ANY)+}
 
 inner_name = {(single_inner+)|(double_inner+)}
-quoted_name = {"'" ~ single_inner ~ "'" | "\"" ~ double_inner ~"\""}
+quoted_name = {"'" ~ single_inner ~ "'" | "\"" ~ double_inner ~"\"" }
 
+empty_string = {"''"| "\"\""}
 node_annotation={"[&"~annotation_set~"]"}
 annotation = {key~"="~value|key}
 key={(quoted_name|unquoted_key)}
 value = {continuous|set|discrete}
 continuous = {(ASCII_DIGIT | "." | "-"|^"e")+ | "NaN"}
-discrete = {(quoted_name|unquoted_name)}
+discrete = {(quoted_name|unquoted_name|empty_string)}
 one_entry={continuous|discrete|markovjump}
 markovjump= {"{" ~continuous ~ "," ~ discrete ~"," ~ discrete~ "}"}
 set={"{" ~one_entry ~ (","~one_entry)* ~"}"}

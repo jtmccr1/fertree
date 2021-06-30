@@ -19,6 +19,8 @@ fn write_newick(tree: &MutableTree) -> String {
     s
 }
 
+//TODO write without annotation
+
 fn write_node(tree: &MutableTree, node_ref: TreeIndex) -> String {
     let mut s = String::new();
     if tree.is_external(node_ref) {
