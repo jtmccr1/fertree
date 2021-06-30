@@ -1,7 +1,7 @@
 mod commands;
 
-use crate::commands::{split, transmission_lineage};
-use commands::{annotate, clades, extract, resolve, stats};
+// use commands::{split, transmission_lineage};
+// use commands::{annotate, clades, extract, resolve, stats};
 use std::{io, path};
 use structopt::StructOpt;
 use std::fs::File;
@@ -13,6 +13,7 @@ use rebl::io::parser::nexus_importer::NexusImporter;
 
 #[macro_use]
 extern crate log;
+extern crate rebl;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -31,7 +32,7 @@ enum Fertree {
     /// A few useful stats about the trees
     Stats {
         #[structopt(subcommand)]
-        cmd: Option<stats::SubCommands>,
+        cmd: Option<commands::stats::SubCommands>,
     },
     /// Annotate the tips of a tree from a tsv file.
     Annotate {
@@ -46,12 +47,12 @@ enum Fertree {
     /// Extract data from a tree
     Extract {
         #[structopt(subcommand)]
-        cmd: extract::SubCommands,
+        cmd: commands::extract::SubCommands,
     },
     /// Collapse (i.e. subsample) monophyletic clades into a set number of tips
     Clades {
         #[structopt(subcommand)]
-        cmd:clades::SubCommands,
+        cmd:commands::clades::SubCommands,
     },
     /// Split an input tree into subtrees of set sizes.
     ///
@@ -78,7 +79,7 @@ enum Fertree {
     /// Resolve polytomies with branches of 0 or nodes spread out between constraints
     Resolve {
         #[structopt(subcommand)]
-        cmd: resolve::SubCommands,
+        cmd: commands::resolve::SubCommands,
     },
     ///Identify transmission lineages on a fully annotated tree
     TransmissionLineages{
@@ -169,16 +170,16 @@ fn main() {
 
 fn run_commands<R:std::io::Read,T:TreeImporter<R>>(tree_importer: T, cmd:Fertree) ->Result<(),Box<dyn Error>> {
     match cmd {
-        Fertree::Stats { cmd } => stats::run(tree_importer, cmd),
-        Fertree::Annotate { traits } => annotate::run(tree_importer, traits),
-        Fertree::Extract { cmd } => extract::run(tree_importer, cmd),
-        Fertree::Clades {cmd}=> clades::run(tree_importer, cmd),
+        Fertree::Stats { cmd } => commands::stats::run(tree_importer, cmd),
+        Fertree::Annotate { traits } => commands::annotate::run(tree_importer, traits),
+        Fertree::Extract { cmd } => commands::extract::run(tree_importer, cmd),
+        Fertree::Clades {cmd}=> commands::clades::run(tree_importer, cmd),
         Fertree::Split {
             min_size,
             explore,
             relaxed,
-        } => split::run(tree_importer, min_size, explore, !relaxed),
-        Fertree::Resolve { cmd } => resolve::run(tree_importer, cmd),
-        Fertree::TransmissionLineages{key,ignore_taxa,to,taxa,origin,cutoff,lag}=>transmission_lineage::run(tree_importer,ignore_taxa,key,to,taxa,origin,cutoff,lag),
+        } => commands::split::run(tree_importer, min_size, explore, !relaxed),
+        Fertree::Resolve { cmd } => commands::resolve::run(tree_importer, cmd),
+        Fertree::TransmissionLineages{key,ignore_taxa,to,taxa,origin,cutoff,lag}=>commands::transmission_lineage::run(tree_importer,ignore_taxa,key,to,taxa,origin,cutoff,lag),
     }
 }

@@ -41,6 +41,7 @@ impl<R: std::io::Read> NexusImporter<R> {
             reading_trees: false,
         }
     }
+    #[allow(dead_code)]
     fn read_tree(input_reader: BufReader<R>) -> Result<MutableTree> {
         let mut parser = NexusImporter {
             last_token: "".to_string(),
