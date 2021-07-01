@@ -336,6 +336,10 @@ mod tests {
         let root = tree.get_root().unwrap();
         let label = tree.get_label(root).unwrap();
         assert_eq!(label, "l");
+
+        let r = tree.get_label_node("l");
+        assert!(r.is_some());
+        assert_eq!(r.unwrap(), root);
         let mut names = vec![];
         for child in tree.get_children(root).iter() {
             if let Some(t) = tree.get_taxon(*child) {

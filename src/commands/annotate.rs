@@ -21,13 +21,13 @@ pub fn run<R: std::io::Read, T: TreeImporter<R>>(mut trees: T,
         let mut tree = trees.read_next_tree()?;
         //TODO avoid parsing at each loop
         let mut reader = command_io::parse_tsv(&traits)?;
-        annotate_tips(&mut tree, &mut reader)?;
+        annotate_nodes(&mut tree, &mut reader)?;
         writeln!(handle, "{}", tree)?;
     }
     Ok(())
 }
 
-pub fn annotate_tips(
+pub fn annotate_nodes(
     tree: &mut MutableTree,
     reader: &mut Reader<File>,
 ) -> Result<(), Box<dyn Error>> {
@@ -38,9 +38,10 @@ pub fn annotate_tips(
     let taxon_key = header.get(0).unwrap().to_string();
 
     for result in reader.deserialize() {
+        trace!("{:?}",result);
         let record: Record = result?;
         if let Some(AnnotationValue::Discrete(taxon)) = record.get(&*taxon_key).unwrap() {
-            if let Some(node_ref) = tree.get_taxon_node(&taxon) {
+            if let Some(node_ref) = tree.get_label_node(&taxon) {
                 for (key, value) in record {
                     if key != taxon_key {
                         if let Some(annotation_value) = value {
@@ -49,7 +50,7 @@ pub fn annotate_tips(
                     }
                 }
             } else {
-                warn!("Taxon {} not found in tree", taxon)
+                warn!("Node {} not found in tree", taxon)
             }
         }
     }

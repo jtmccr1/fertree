@@ -5,6 +5,11 @@ use std::io::Write;
 use rebl::tree::AnnotationValue;
 use regex::Regex;
 use rebl::tree::mutable_tree::MutableTree;
+use std::path;
+use std::path::Path;
+use crate::commands::command_io;
+use std::collections::HashMap;
+use std::fs::File;
 
 
 #[derive(Debug, StructOpt)]
@@ -23,6 +28,17 @@ pub enum SubCommands {
         #[structopt(subcommand)]
         sub_cmd: TreeTimeSubCommands
     },
+    // set node lengths from file
+    Set{
+        #[structopt(
+        short,
+        long,
+        parse(from_os_str),
+        help = "tsv with node label/taxon and length"
+        )]
+        file: path::PathBuf,
+
+    }
 }
 #[derive(Debug, StructOpt)]
 pub enum TreeTimeSubCommands{
@@ -56,6 +72,9 @@ pub fn run<R: std::io::Read, T: TreeImporter<R>>(mut trees: T,
             }
             SubCommands::TreeTime {ref sub_cmd}=>{
                 tree_time(&mut tree, sub_cmd);
+            },
+            SubCommands::Set{ref file}=>{
+                from_file(&mut tree, file)
             }
         }
         writeln!(handle, "{}", tree)?;
@@ -85,6 +104,29 @@ fn round( tree:&mut MutableTree){
             tree.set_length(i, l.round());
         }
     }
+}
+fn from_file(tree:&mut MutableTree, lengths:&Path){
+    let file = File::open(lengths).expect("issue reading file");
+    let mut rdr = csv::ReaderBuilder::new()
+        .delimiter(b'\t')
+        .comment(Some(b'#'))
+        .has_headers(false)
+        .from_reader(file);
+
+    // We nest this call in its own scope because of lifetimes.
+    type Record = HashMap<String, f64>;
+
+    for result in rdr.records() {
+        let record = result.unwrap();
+        let node = tree.get_label_node(&record[0]);
+        if let Some(i)  = node{
+            tree.set_length(i,record[1].parse().unwrap())
+        }else{
+            warn!("Node with label: {} not found in tree",&record[0])
+        }
+    }
+
+
 }
 
 fn tree_time( tree:&mut MutableTree, cmd:&TreeTimeSubCommands){

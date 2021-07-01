@@ -48,6 +48,7 @@ pub struct MutableTree {
     pub internal_nodes: Vec<TreeIndex>,
     pub annotation_type: HashMap<String, AnnotationValue>,
     pub taxon_node_map: HashMap<String, TreeIndex>,
+    pub label_node_map: HashMap<String, TreeIndex>,
     pub root: Option<TreeIndex>,
     pub heights_known: bool,
     pub branchlengths_known: bool,
@@ -69,6 +70,7 @@ impl MutableTree {
             internal_nodes: vec![],
             annotation_type: Default::default(),
             taxon_node_map: Default::default(),
+            label_node_map:Default::default(),
             root: None,
             heights_known: false,
             branchlengths_known: false,
@@ -109,6 +111,7 @@ impl MutableTree {
         } else {
             self.external_nodes.push(index);
             if let Some(taxon) = node.taxon {
+                self.label_node_map.insert(taxon.clone(), index);
                 self.taxon_node_map.insert(taxon, index);
             }
         }
@@ -304,6 +307,7 @@ impl MutableTree {
                 self.nodes.push(new_node);
                 self.external_nodes.push(index);
                 self.taxon_node_map.insert(taxon.to_string(), index);
+                self.label_node_map.insert(taxon.to_string(), index);
 
                 Some(index)
             } else {
@@ -315,6 +319,7 @@ impl MutableTree {
             self.nodes.push(new_node);
             self.external_nodes.push(index);
             self.taxon_node_map.insert(taxon.to_string(), index);
+            self.label_node_map.insert(taxon.to_string(), index);
 
             Some(index)
         }
@@ -521,7 +526,8 @@ impl MutableTree {
     }
     pub fn set_label(&mut self, index: TreeIndex, label: String) {
         let node = self.get_node_mut(index).expect("node not in tree");
-        node.label = Some(label);
+        node.label = Some(label.clone());
+        self.label_node_map.insert(label,index);
     }
 
     pub fn set_length(&mut self, index: TreeIndex, bl: f64) {
@@ -591,7 +597,8 @@ impl MutableTree {
     }
     pub fn label_node(&mut self, index: TreeIndex, label: String) {
         let node = self.get_unwrapped_node_mut(index);
-        node.label = Some(label);
+        node.label = Some(label.clone());
+        self.label_node_map.insert(label, index);
     }
 
     pub fn get_label(&self, index: TreeIndex) -> Option<&str> {
@@ -601,7 +608,9 @@ impl MutableTree {
     pub fn get_taxon_node(&self, taxon: &str) -> Option<usize> {
         self.taxon_node_map.get(taxon).copied()
     }
-
+    pub fn get_label_node(&self, label: &str) -> Option<usize> {
+        self.label_node_map.get(label).copied()
+    }
     pub fn annotate_tree(&mut self, key: String, value: AnnotationValue) {
         self.tree_annotation.insert(key, value);
     }

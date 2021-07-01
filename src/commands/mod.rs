@@ -26,11 +26,9 @@ pub mod command_io {
 
         // We nest this call in its own scope because of lifetimes.
         debug!("read with headers:{:?}", rdr.headers().unwrap());
-
         Ok(rdr)
     }
 
-    //HashMap<String,HashMap<String,AnnotationValue>>
     pub fn parse_taxa(taxa_file: Option<path::PathBuf>) -> Result<HashSet<String>, Box<dyn Error>> {
         Ok(match taxa_file {
             None => { HashSet::new() }
