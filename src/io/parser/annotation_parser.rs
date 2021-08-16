@@ -101,7 +101,12 @@ impl AnnotationParser {
             // `input.error` links the error to the location in the input file where it occurred.
             .map_err(|e| input.error(e));
 
-        Ok(AnnotationValue::Continuous(x.unwrap()))
+        if let Ok(float) = x{
+            Ok(AnnotationValue::Continuous(float))
+        }else{
+            warn!("found numbers in annotation but failed to parse {} falling back to discrete annotation",input.as_str());
+            Ok(AnnotationValue::Discrete(input.as_str().parse().unwrap()))
+        }
     }
     fn discrete(input: Node) -> PestResult<AnnotationValue> {
         Ok(match_nodes!(input.into_children();
@@ -144,6 +149,12 @@ impl AnnotationParser {
         // There should be a single root node in the parsed tree
         let input = inputs.single()?;
         AnnotationParser::node_annotation(input)
+    }
+    pub fn parse_annotation_value(s:&str) ->PestResult< AnnotationValue>{
+        let inputs = AnnotationParser::parse(Rule::value, s)?;
+        // There should be a single root node in the parsed tree
+        let input = inputs.single()?;
+        AnnotationParser::value(input)
     }
 }
 

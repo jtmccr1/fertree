@@ -53,9 +53,9 @@ impl LineageFinder {
     }
     fn find_lineages(&mut self, tree: &MutableTree, node: usize, lineage_index: Option<usize>) {
         if let Some(mut parent) = tree.get_parent(node) {
-            let annotation = tree.get_annotation(node, &self.key).unwrap();
+            let annotation = tree.get_annotation(node, &self.key);
 
-            if annotation == &self.value {
+            if annotation.is_some() && annotation.unwrap() == &self.value {
                 if let Some(li) = lineage_index { // parent was in this lineage
                     if tree.is_external(node) {
                         let taxa = tree.get_taxon(node).expect("tip should have a taxon");
@@ -67,13 +67,14 @@ impl LineageFinder {
 
                         if self.will_be_sampled_before_lag(tree, node, 0.0) && !self.has_been_sampled_within_lag(tree, node, 0.0) {
                             let id = self.lineages.len();
-                            let mut parent_location = tree.get_annotation(parent, &self.key).unwrap();
+                            let default_location = AnnotationValue::Discrete("unknown".parse().unwrap());
+                            let mut parent_location = tree.get_annotation(parent, &self.key).unwrap_or(&default_location);
                             // if parent is in the same location assert it was passed up because of the
                             //height cutoff and go back to root or first parent with location not here
                             let parent_height = tree.get_height(parent).unwrap();
                             while parent_location == &self.value {
                                 parent = tree.get_parent(parent).expect("Hit the root looking for ancestor location");
-                                parent_location = tree.get_annotation(parent, &self.key).unwrap();
+                                parent_location = tree.get_annotation(parent, &self.key).unwrap_or(&default_location);
                             }
 
                             let new_lineage = TransmissionLineage {
@@ -101,13 +102,14 @@ impl LineageFinder {
                     // new lineage
 
                     let id = self.lineages.len();
-                    let mut parent_location = tree.get_annotation(parent, &self.key).unwrap();
+                    let default_location = AnnotationValue::Discrete("unknown".parse().unwrap());
+                    let mut parent_location = tree.get_annotation(parent, &self.key).unwrap_or(&default_location);
                     // if parent is in the same location assert it was passed up because of the
                     //height cutoff and go back to root or first parent with location not here
                     let parent_height = tree.get_height(parent).unwrap();
                     while parent_location == &self.value {
                         parent = tree.get_parent(parent).expect("Hit the root looking for ancestor location");
-                        parent_location = tree.get_annotation(parent, &self.key).unwrap();
+                        parent_location = tree.get_annotation(parent, &self.key).unwrap_or(&default_location);
                     }
 
                     let new_lineage = TransmissionLineage {
@@ -145,8 +147,8 @@ impl LineageFinder {
             }
         } else {
             //At the root
-            let annotation = tree.get_annotation(node, &self.key).unwrap();
-            if annotation == &self.value && self.will_be_sampled_before_lag(tree, node, 0.0) {
+            let annotation = tree.get_annotation(node, &self.key);
+            if annotation.is_some() && annotation.unwrap() == &self.value && self.will_be_sampled_before_lag(tree, node, 0.0) {
                 let id = self.lineages.len();
                 let new_lineage = TransmissionLineage {
                     taxa: vec![],
@@ -238,6 +240,10 @@ pub fn run<R: std::io::Read, T: TreeImporter<R>>(mut trees: T, ignore_taxa: Opti
         } else {
             tree.calc_node_heights();
         }
+        //if clades then annotate internal nodes with labels
+
+
+
         lineage_finder.find_lineages(&tree, tree.get_root().unwrap(), None);
         for l in &lineage_finder.lineages {
             if taxa_flag {

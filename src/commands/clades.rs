@@ -24,8 +24,14 @@ pub enum SubCommands {
         prefix: Option<String>,
         #[structopt(short, long, help = "annotation key we are collapsing by. must be discrete")]
         annotation: String,
-        #[structopt(short, long, help = "annotation value we are collapsing by")]
+        #[structopt(short, long, help = "annotation value we are interested in")]
         value: String,
+        #[structopt(
+        short,
+        long,
+        help = "annotate internal nodes as well"
+        )]
+        internal: bool,
     },
     /// Collapse monophyletic clades
     Collapse {
@@ -52,10 +58,10 @@ pub fn run<R: std::io::Read, T: TreeImporter<R>>(mut trees: T,
                 let new_tree = collapse_uniform_clades(&mut tree, &annotation, &value, min_size);
                 writeln!(handle, "{}", new_tree)?;
             }
-            SubCommands::Label { ref annotation, ref value, ref prefix } => {
-                annotate_uniform_clades(&mut tree, &annotation, &value, &prefix);
+            SubCommands::Label { ref annotation, ref value, ref prefix,ref internal } => {
+                annotate_uniform_clades(&mut tree, &annotation, &value, &prefix,&internal);
                 writeln!(handle, "{}", tree)?;
-            }
+            },
         }
     }
     Ok(())
@@ -91,7 +97,7 @@ pub fn collapse_uniform_clades(tree: &mut MutableTree, key: &str, value: &str, m
     MutableTree::from_tree(tree, &taxa)
 }
 
-fn annotate_uniform_clades(tree: &mut MutableTree, key: &str, value: &str, prefix: &Option<String>) {
+fn annotate_uniform_clades(tree: &mut MutableTree, key: &str, value: &str, prefix: &Option<String>, internal: &bool) {
     let monophyletic_groups =
         get_monophyletic_groups(tree, tree.get_root().unwrap(), key, value);
     if monophyletic_groups.0 {
@@ -104,7 +110,12 @@ fn annotate_uniform_clades(tree: &mut MutableTree, key: &str, value: &str, prefi
     for group in monophyletic_groups.1.iter() {
         if group.len() > 1 {
             for node in group {
-                tree.annotate_node(*node, String::from("Clade"), AnnotationValue::Discrete(format!("{}_{}.{}", pre, value, counter)));
+                if *internal || tree.is_external(*node) {
+                    tree.annotate_node(*node, String::from("Clade"), AnnotationValue::Discrete(format!("{}_{}.{}", pre, value, counter)));
+                }
+                if *internal || !tree.is_external(*node){
+                    tree.annotate_node(*node, String::from(key), AnnotationValue::Discrete(String::from(value)));
+                }
             }
             counter += 1;
         }
@@ -131,9 +142,13 @@ fn get_monophyletic_groups(
                     panic!("not a discrete trait")
                 }
             }
+        }else{
+            return (false, vec![vec![]])
+
         }
-        // not ignoring empty nodes they are counted
-        panic!("Annotation not found on a tip: {}. all tips must be annotated", tree.get_taxon(node_ref).unwrap_or("no label"));
+        // ignoring empty nodes they are counted
+        // panic!("Annotation not found on a tip: {}. all tips must be annotated", tree.get_taxon(node_ref).unwrap_or("no label"));
+
     }
 
     let mut child_output = vec![];
@@ -150,13 +165,14 @@ fn get_monophyletic_groups(
         .map(|t| t.0)
         .fold(true, |acc, b| acc & b);
     if am_i_a_root {
-        let combined_child_tips = child_output
+        let mut combined_child_tips = child_output
             .into_iter()
             .map(|t| t.1)
             .flatten()
             .flatten()
             .collect::<Vec<TreeIndex>>();
-        (true, vec![combined_child_tips])
+        combined_child_tips.push(node_ref);
+            (true, vec![combined_child_tips])
     } else {
         let child_tips = child_output
             .into_iter()
