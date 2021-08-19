@@ -41,7 +41,6 @@ pub fn annotate_nodes(
     for result in reader.deserialize() {
         trace!("{:?}",result);
         let record: Record = result?;
-        println!("{:?}",record.get(&*taxon_key).unwrap() );
         if let Some(taxon) = record.get(&*taxon_key).unwrap() {
             if let Some(node_ref) = tree.get_label_node(&taxon) {
                 for (key, value) in record {

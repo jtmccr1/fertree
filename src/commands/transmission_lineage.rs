@@ -173,9 +173,11 @@ impl LineageFinder {
 
     fn will_be_sampled_before_lag(&self, tree: &MutableTree, node: usize, current_lag: f64) -> bool {
         let mut respects = false;
+        let default_location = AnnotationValue::Discrete("unknown".parse().unwrap());
+        let node_annotation = tree.get_annotation(node, &self.key).unwrap_or(&default_location);
         if self.lag == f64::INFINITY {
             respects = true;
-        } else if tree.get_annotation(node, &self.key).expect("node should annotation") != &self.value || current_lag > self.lag {
+        } else if node_annotation != &self.value || current_lag > self.lag {
             respects = false;
         } else if tree.is_external(node) {
             respects = true;
@@ -200,7 +202,8 @@ impl LineageFinder {
         let mut parent = tree.get_parent(node);
         let mut new_lag = current_lag;
         while current_lag < self.lag && parent.is_some() && !respects {
-            let parent_annotation = tree.get_annotation(parent.unwrap(), &self.key).unwrap();
+            let default_location = AnnotationValue::Discrete("unknown".parse().unwrap());
+            let mut parent_annotation = tree.get_annotation(parent.unwrap(), &self.key).unwrap_or(&default_location);
             if parent_annotation != &self.value {
                 break;
             }

@@ -81,7 +81,8 @@ enum Fertree {
         #[structopt(subcommand)]
         cmd: commands::resolve::SubCommands,
     },
-    ///Identify transmission lineages on a fully annotated tree
+    ///Identify transmission lineages on a fully annotated tree. Unannotated nodes will be assigned
+    ///an "unknown" as a discrete trait.
     TransmissionLineages{
 
         #[structopt( long, parse(from_os_str), help = "file of taxa to ignore", global = true)]
