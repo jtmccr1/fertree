@@ -1,10 +1,10 @@
-use crate::tree::mutable_tree::{MutableTree, TreeIndex};
-use std::io::{Read, BufReader};
-use crate::io::error::{IoError};
-use std::collections::HashMap;
-use crate::tree::AnnotationValue;
+use crate::io::error::IoError;
 use crate::io::parser::annotation_parser::AnnotationParser;
 use crate::io::parser::tree_importer::TreeImporter;
+use crate::tree::mutable_tree::{MutableTree, TreeIndex};
+use crate::tree::AnnotationValue;
+use std::collections::HashMap;
+use std::io::{BufReader, Read};
 
 type Result<T> = std::result::Result<T, IoError>;
 type Byte = u8;
@@ -67,7 +67,10 @@ impl<R: std::io::Read> NewickImporter<R> {
     }
     fn read_external_node(&mut self) -> Result<TreeIndex> {
         let label = self.read_token(",:();")?;
-        let node = self.get_tree().make_external_node(label.as_str(), None).expect("Failed to make tip");
+        let node = self
+            .get_tree()
+            .make_external_node(label.as_str(), None)
+            .expect("Failed to make tip");
         self.annotation_node(node);
 
         Ok(node)
@@ -104,9 +107,7 @@ impl<R: std::io::Read> NewickImporter<R> {
                 self.last_byte = Some(c);
                 Ok(c)
             }
-            Some(c) => {
-                Ok(c)
-            }
+            Some(c) => Ok(c),
         }
     }
     fn read_byte(&mut self) -> Result<Byte> {
@@ -197,20 +198,18 @@ impl<R: std::io::Read> NewickImporter<R> {
 
         match s.parse() {
             Ok(l) => Ok(l),
-            Err(e) => panic!("{}", e)
+            Err(e) => panic!("{}", e),
         }
     }
 
     fn read(&mut self) -> Result<Byte> {
         let mut buf: [u8; 1] = [0; 1];
         match self.last_byte {
-            None => {
-                match self.reader.read(&mut buf) {
-                    Ok(1) => Ok(buf[0]),
-                    Ok(0) => Err(IoError::Eof),
-                    _ => Err(IoError::Other)
-                }
-            }
+            None => match self.reader.read(&mut buf) {
+                Ok(1) => Ok(buf[0]),
+                Ok(0) => Err(IoError::Eof),
+                _ => Err(IoError::Other),
+            },
             Some(c) => {
                 self.last_byte = None;
                 Ok(c)
@@ -243,7 +242,7 @@ impl<R: std::io::Read> NewickImporter<R> {
             self.last_annotation = Some(annotation);
             Ok(())
         } else {
-            panic!("Error parsing annotation: {}",comment)
+            panic!("Error parsing annotation: {}", comment)
         }
     }
 
@@ -292,7 +291,7 @@ impl<R: std::io::Read> TreeImporter<R> for NewickImporter<R> {
                 true
             }
             Err(IoError::Eof) => false,
-            Err(e) => panic!("parsing error: {}", e)
+            Err(e) => panic!("parsing error: {}", e),
         }
     }
     fn read_next_tree(&mut self) -> Result<MutableTree> {
@@ -321,7 +320,7 @@ impl<R: std::io::Read> TreeImporter<R> for NewickImporter<R> {
                 );
                 Ok(self.tree.take().unwrap())
             }
-            _ => Err(IoError::Other)
+            _ => Err(IoError::Other),
         }
     }
 }
@@ -362,7 +361,8 @@ mod tests {
 
     #[test]
     fn scientific() {
-        let tree = NewickImporter::read_tree(BufReader::new("(a:1E1,b:2e-5)l;".as_bytes())).unwrap();
+        let tree =
+            NewickImporter::read_tree(BufReader::new("(a:1E1,b:2e-5)l;".as_bytes())).unwrap();
         let root = tree.get_root().unwrap();
         let mut bl = vec![];
         if let Some(l) = tree.get_length(root) {
@@ -378,7 +378,12 @@ mod tests {
 
     #[test]
     fn quoted() {
-        assert!(true, "{}", NewickImporter::read_tree(BufReader::new("('234] ':1,'here a *':1);".as_bytes())).is_ok());
+        assert!(
+            true,
+            "{}",
+            NewickImporter::read_tree(BufReader::new("('234] ':1,'here a *':1);".as_bytes()))
+                .is_ok()
+        );
     }
 
     #[test]
@@ -387,15 +392,24 @@ mod tests {
     }
     #[test]
     fn branch_comment() {
-        let t = NewickImporter::read_tree(BufReader::new("(a[&test=ok],b:[&jump={{0.1,U,me}}]1);".as_bytes())).unwrap();
+        let t = NewickImporter::read_tree(BufReader::new(
+            "(a[&test=ok],b:[&jump={{0.1,U,me}}]1);".as_bytes(),
+        ))
+        .unwrap();
         let mj = t.get_annotation(1, "jump");
         let a = t.get_annotation(0, "test");
-        assert!(NewickImporter::read_tree(BufReader::new("(a[&test=ok],b:[&jump={{0.1,U,me}}]1);".as_bytes())).is_ok());
+        assert!(NewickImporter::read_tree(BufReader::new(
+            "(a[&test=ok],b:[&jump={{0.1,U,me}}]1);".as_bytes()
+        ))
+        .is_ok());
     }
 
     #[test]
     fn double_comment() {
-        assert!(NewickImporter::read_tree(BufReader::new("(a[&test=ok,value=0.9],b:1);".as_bytes())).is_ok());
+        assert!(NewickImporter::read_tree(BufReader::new(
+            "(a[&test=ok,value=0.9],b:1);".as_bytes()
+        ))
+        .is_ok());
     }
 
     #[test]
@@ -405,12 +419,18 @@ mod tests {
 
     #[test]
     fn node_id() {
-        assert!(NewickImporter::read_tree(BufReader::new("((A,T)Node_1:1,(a,b:1));".as_bytes())).is_ok());
+        assert!(
+            NewickImporter::read_tree(BufReader::new("((A,T)Node_1:1,(a,b:1));".as_bytes()))
+                .is_ok()
+        );
     }
 
     #[test]
     fn root_length_and_label() {
-        assert!(NewickImporter::read_tree(BufReader::new("((A,T)Node_1:1,(a,b:1))root:0.1;".as_bytes())).is_ok());
+        assert!(NewickImporter::read_tree(BufReader::new(
+            "((A,T)Node_1:1,(a,b:1))root:0.1;".as_bytes()
+        ))
+        .is_ok());
     }
 
     #[test]

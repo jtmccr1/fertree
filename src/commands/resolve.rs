@@ -1,9 +1,9 @@
 use rand::{thread_rng, Rng};
+use rebl::io::parser::tree_importer::TreeImporter;
+use rebl::tree::mutable_tree::{MutableTree, TreeIndex};
 use std::error::Error;
 use std::io::Write;
 use structopt::StructOpt;
-use rebl::tree::mutable_tree::{TreeIndex, MutableTree};
-use rebl::io::parser::tree_importer::TreeImporter;
 
 #[derive(Debug, StructOpt)]
 pub enum SubCommands {
@@ -18,8 +18,9 @@ struct Polytomy {
     tips: Vec<TreeIndex>,
 }
 
-pub fn run<R: std::io::Read, T: TreeImporter<R>>(mut trees: T,
-                                                 cmd: SubCommands,
+pub fn run<R: std::io::Read, T: TreeImporter<R>>(
+    mut trees: T,
+    cmd: SubCommands,
 ) -> Result<(), Box<dyn Error>> {
     let stdout = std::io::stdout(); // get the global stdout entity
     let mut handle = stdout.lock(); // acquire a lock on it
@@ -37,7 +38,8 @@ fn resolve(tree: &mut MutableTree, cmd: &SubCommands) {
     if let SubCommands::Evenly = cmd {
         tree.calc_node_heights();
     }
-    let mut polytomies = tree.preorder_iter()
+    let mut polytomies = tree
+        .preorder_iter()
         .filter(|node| !tree.is_external(*node))
         .map(|n| (n, tree.get_children(n)))
         .filter(|(_n, kids)| kids.len() > 2)
@@ -179,7 +181,6 @@ fn insert_nodes(tree: &mut MutableTree, node_ref: TreeIndex) {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use crate::commands::resolve::{resolve, SubCommands};
@@ -204,7 +205,6 @@ mod tests {
         assert_eq!(9.0, bl);
     }
 
-
     #[test]
     fn evenly() {
         let tree_string = "((A:1,(B:1,C:1,D:1,a:1):1,E:1):1,F:1,G:1);";
@@ -217,4 +217,3 @@ mod tests {
         assert_eq!(starting_height, tree.get_height(tree.root.unwrap()));
     }
 }
-

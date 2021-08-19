@@ -1,9 +1,9 @@
 use std::error::Error;
 use structopt::StructOpt;
 
+use rebl::io::parser::tree_importer::TreeImporter;
 use rebl::tree::AnnotationValue;
 use std::io::Write;
-use rebl::io::parser::tree_importer::TreeImporter;
 
 #[derive(Debug, StructOpt)]
 pub enum SubCommands {
@@ -13,15 +13,24 @@ pub enum SubCommands {
     Annotations,
     /// Extract a tree from a nexus file
     Tree {
-        #[structopt(long, required_if("index", "None"), help = "the id of the tree to extract")]
+        #[structopt(
+            long,
+            required_if("index", "None"),
+            help = "the id of the tree to extract"
+        )]
         id: Option<String>,
-        #[structopt(long, required_if("id", "None"), help = "The 0 based index of the tree to extract.")]
+        #[structopt(
+            long,
+            required_if("id", "None"),
+            help = "The 0 based index of the tree to extract."
+        )]
         index: Option<usize>,
     },
 }
 
-pub fn run<R: std::io::Read, T: TreeImporter<R>>(trees: T,
-                                                 cmd: SubCommands,
+pub fn run<R: std::io::Read, T: TreeImporter<R>>(
+    trees: T,
+    cmd: SubCommands,
 ) -> Result<(), Box<dyn Error>> {
     match cmd {
         SubCommands::Taxa => taxa(trees),
@@ -85,10 +94,14 @@ fn annotation_value_string(value: Option<&AnnotationValue>) -> String {
     }
 }
 
-fn tree<R: std::io::Read, T: TreeImporter<R>>(mut trees: T, id: Option<String>, index: Option<usize>) -> Result<(), Box<dyn Error>> {
+fn tree<R: std::io::Read, T: TreeImporter<R>>(
+    mut trees: T,
+    id: Option<String>,
+    index: Option<usize>,
+) -> Result<(), Box<dyn Error>> {
     let stdout = std::io::stdout(); // get the global stdout entity
     let mut handle = stdout.lock(); // acquire a lock on it
-    //TODO could skip trees that don't match instead of parsing them all.
+                                    //TODO could skip trees that don't match instead of parsing them all.
     let mut found = false;
 
     if let Some(i) = index {
@@ -115,4 +128,3 @@ fn tree<R: std::io::Read, T: TreeImporter<R>>(mut trees: T, id: Option<String>, 
     }
     Ok(())
 }
-

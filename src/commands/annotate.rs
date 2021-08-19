@@ -8,12 +8,13 @@ use std::io::Write;
 use std::path;
 
 use csv::Reader;
-use std::fs::File;
-use rebl::io::parser::tree_importer::TreeImporter;
 use rebl::io::parser::annotation_parser::AnnotationParser;
+use rebl::io::parser::tree_importer::TreeImporter;
+use std::fs::File;
 
-pub fn run<R: std::io::Read, T: TreeImporter<R>>(mut trees: T,
-                                                 traits: path::PathBuf,
+pub fn run<R: std::io::Read, T: TreeImporter<R>>(
+    mut trees: T,
+    traits: path::PathBuf,
 ) -> Result<(), Box<dyn Error>> {
     let stdout = std::io::stdout(); // get the global stdout entity
     let mut handle = stdout.lock(); // acquire a lock on it
@@ -39,14 +40,18 @@ pub fn annotate_nodes(
     let taxon_key = header.get(0).unwrap().to_string();
 
     for result in reader.deserialize() {
-        trace!("{:?}",result);
+        trace!("{:?}", result);
         let record: Record = result?;
         if let Some(taxon) = record.get(&*taxon_key).unwrap() {
             if let Some(node_ref) = tree.get_label_node(&taxon) {
                 for (key, value) in record {
                     if key != taxon_key {
                         if let Some(annotation_value) = value {
-                            tree.annotate_node(node_ref, key, AnnotationParser::parse_annotation_value (&*annotation_value)?);
+                            tree.annotate_node(
+                                node_ref,
+                                key,
+                                AnnotationParser::parse_annotation_value(&*annotation_value)?,
+                            );
                         }
                     }
                 }
@@ -57,4 +62,3 @@ pub fn annotate_nodes(
     }
     Ok(())
 }
-

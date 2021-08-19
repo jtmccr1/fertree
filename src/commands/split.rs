@@ -1,8 +1,8 @@
+use rebl::io::parser::tree_importer::TreeImporter;
 use rebl::tree::mutable_tree::{MutableTree, TreeIndex};
 use std::collections::HashSet;
 use std::error::Error;
 use std::io::Write;
-use rebl::io::parser::tree_importer::TreeImporter;
 
 #[derive(Debug, PartialEq)]
 struct Subtree {
@@ -100,10 +100,11 @@ impl SubtreeSearcher {
     }
 }
 
-pub fn run<R: std::io::Read, T: TreeImporter<R>>(mut trees: T,
-                                                 min_clade_size: Option<usize>,
-                                                 explore: bool,
-                                                 strict: bool,
+pub fn run<R: std::io::Read, T: TreeImporter<R>>(
+    mut trees: T,
+    min_clade_size: Option<usize>,
+    explore: bool,
+    strict: bool,
 ) -> Result<(), Box<dyn Error>> {
     let stdout = std::io::stdout(); // get the global stdout entity
     let mut handle = stdout.lock(); // acquire a lock on it
@@ -136,9 +137,8 @@ pub fn run<R: std::io::Read, T: TreeImporter<R>>(mut trees: T,
                 min_size *= 2;
             }
         } else {
-            searcher.collate_subtrees(
-                min_clade_size.expect("min-clade should be set to an integer"),
-            );
+            searcher
+                .collate_subtrees(min_clade_size.expect("min-clade should be set to an integer"));
             let taxa = &searcher
                 .tree
                 .external_nodes
@@ -171,4 +171,3 @@ pub fn run<R: std::io::Read, T: TreeImporter<R>>(mut trees: T,
     }
     Ok(())
 }
-

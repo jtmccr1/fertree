@@ -1,8 +1,7 @@
-use pest_consume::{match_nodes, Error, Parser};
 use crate::tree::AnnotationValue;
 use crate::tree::MarkovJump;
+use pest_consume::{match_nodes, Error, Parser};
 use std::collections::HashMap;
-
 
 type PestResult<T> = std::result::Result<T, Error<Rule>>;
 type Node<'i> = pest_consume::Node<'i, Rule, ()>;
@@ -50,9 +49,9 @@ impl AnnotationParser {
 
     fn key(input: Node) -> PestResult<String> {
         Ok(match_nodes!(input.into_children();
-        [unquoted_key(n)]=>n,
-        [quoted_name(n)]=>n,
-      ))
+          [unquoted_key(n)]=>n,
+          [quoted_name(n)]=>n,
+        ))
     }
     fn unquoted_key(input: Node) -> PestResult<String> {
         let name = input.as_str();
@@ -65,9 +64,9 @@ impl AnnotationParser {
     }
     fn quoted_name(input: Node) -> PestResult<String> {
         Ok(match_nodes!(input.into_children();
-        [single_inner(n)]=>n,
-        [double_inner(n)]=>n,
-      ))
+          [single_inner(n)]=>n,
+          [double_inner(n)]=>n,
+        ))
     }
     fn single_inner(input: Node) -> PestResult<String> {
         let name = input.as_str();
@@ -77,7 +76,7 @@ impl AnnotationParser {
         let name = input.as_str();
         Ok(name.to_string())
     }
-    fn empty_string(input:Node)->PestResult<String>{
+    fn empty_string(input: Node) -> PestResult<String> {
         Ok(String::new())
     }
     fn value(input: Node) -> PestResult<AnnotationValue> {
@@ -101,19 +100,19 @@ impl AnnotationParser {
             // `input.error` links the error to the location in the input file where it occurred.
             .map_err(|e| input.error(e));
 
-        if let Ok(float) = x{
+        if let Ok(float) = x {
             Ok(AnnotationValue::Continuous(float))
-        }else{
+        } else {
             warn!("found numbers in annotation but failed to parse {} falling back to discrete annotation",input.as_str());
             Ok(AnnotationValue::Discrete(input.as_str().parse().unwrap()))
         }
     }
     fn discrete(input: Node) -> PestResult<AnnotationValue> {
         Ok(match_nodes!(input.into_children();
-        [unquoted_name(n)]=>AnnotationValue::Discrete(n),
-        [quoted_name(n)]=>AnnotationValue::Discrete(n),
-        [empty_string(n)]=>AnnotationValue::Discrete(n)
-      ))
+          [unquoted_name(n)]=>AnnotationValue::Discrete(n),
+          [quoted_name(n)]=>AnnotationValue::Discrete(n),
+          [empty_string(n)]=>AnnotationValue::Discrete(n)
+        ))
     }
     fn set(input: Node) -> PestResult<AnnotationValue> {
         let set = match_nodes!(input.into_children();
@@ -124,22 +123,22 @@ impl AnnotationParser {
 
     fn markovjump(input: Node) -> PestResult<AnnotationValue> {
         Ok(match_nodes!(input.into_children();
-        [continuous(t),discrete(s),discrete(d)]=>{
-                let mut mj_time = None;
-                let mut mj_source = None;
-                let mut mj_dest = None;
-                if let  AnnotationValue::Continuous(time) =t {
-                    mj_time = Some(time);
-                }
-                if let AnnotationValue::Discrete(source) = s  {
-                    mj_source = Some(source.clone());
-                }
-                 if let AnnotationValue::Discrete(dest) =d {
-                    mj_dest = Some(dest.clone());
-                }
-                AnnotationValue::MarkovJump(MarkovJump{time:mj_time.unwrap(),source:mj_source.unwrap(),destination:mj_dest.unwrap()})
-            }
-      ))
+          [continuous(t),discrete(s),discrete(d)]=>{
+                  let mut mj_time = None;
+                  let mut mj_source = None;
+                  let mut mj_dest = None;
+                  if let  AnnotationValue::Continuous(time) =t {
+                      mj_time = Some(time);
+                  }
+                  if let AnnotationValue::Discrete(source) = s  {
+                      mj_source = Some(source.clone());
+                  }
+                   if let AnnotationValue::Discrete(dest) =d {
+                      mj_dest = Some(dest.clone());
+                  }
+                  AnnotationValue::MarkovJump(MarkovJump{time:mj_time.unwrap(),source:mj_source.unwrap(),destination:mj_dest.unwrap()})
+              }
+        ))
     }
 }
 
@@ -150,14 +149,13 @@ impl AnnotationParser {
         let input = inputs.single()?;
         AnnotationParser::node_annotation(input)
     }
-    pub fn parse_annotation_value(s:&str) ->PestResult< AnnotationValue>{
+    pub fn parse_annotation_value(s: &str) -> PestResult<AnnotationValue> {
         let inputs = AnnotationParser::parse(Rule::value, s)?;
         // There should be a single root node in the parsed tree
         let input = inputs.single()?;
         AnnotationParser::value(input)
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -167,30 +165,54 @@ mod tests {
     #[test]
     fn discrete() {
         let mut exp = HashMap::new();
-        exp.insert("location".to_owned(), AnnotationValue::Discrete("UK".to_owned()));
+        exp.insert(
+            "location".to_owned(),
+            AnnotationValue::Discrete("UK".to_owned()),
+        );
 
-        assert_eq!(AnnotationParser::parse_annotation("[&location=UK]").unwrap(), exp);
+        assert_eq!(
+            AnnotationParser::parse_annotation("[&location=UK]").unwrap(),
+            exp
+        );
     }
 
     #[test]
     fn discrete_quotes() {
         let mut exp = HashMap::new();
-        exp.insert("location".to_owned(), AnnotationValue::Discrete("UK".to_owned()));
-        assert_eq!(AnnotationParser::parse_annotation("[&location=\"UK\"]").unwrap(), exp);
+        exp.insert(
+            "location".to_owned(),
+            AnnotationValue::Discrete("UK".to_owned()),
+        );
+        assert_eq!(
+            AnnotationParser::parse_annotation("[&location=\"UK\"]").unwrap(),
+            exp
+        );
     }
 
     #[test]
     fn empty_quotes() {
         let mut exp = HashMap::new();
-        exp.insert("location".to_owned(), AnnotationValue::Discrete("".to_owned()));
-        assert_eq!(AnnotationParser::parse_annotation("[&location=\"\"]").unwrap(), exp);
+        exp.insert(
+            "location".to_owned(),
+            AnnotationValue::Discrete("".to_owned()),
+        );
+        assert_eq!(
+            AnnotationParser::parse_annotation("[&location=\"\"]").unwrap(),
+            exp
+        );
     }
 
     #[test]
     fn quoted_key() {
         let mut exp = HashMap::new();
-        exp.insert("location".to_owned(), AnnotationValue::Discrete("UK".to_owned()));
-        assert_eq!(AnnotationParser::parse_annotation("[&'location'=UK]").unwrap(), exp);
+        exp.insert(
+            "location".to_owned(),
+            AnnotationValue::Discrete("UK".to_owned()),
+        );
+        assert_eq!(
+            AnnotationParser::parse_annotation("[&'location'=UK]").unwrap(),
+            exp
+        );
     }
 
     #[test]
@@ -203,16 +225,29 @@ mod tests {
     #[test]
     fn multiple_commnet() {
         let mut exp = HashMap::new();
-        exp.insert("location[1]".to_owned(), AnnotationValue::Discrete("UK".to_owned()));
+        exp.insert(
+            "location[1]".to_owned(),
+            AnnotationValue::Discrete("UK".to_owned()),
+        );
         exp.insert("lat".to_owned(), AnnotationValue::Continuous(0.0));
-        assert_eq!(AnnotationParser::parse_annotation("[&location[1]=UK,lat=0.0]").unwrap(), exp);
+        assert_eq!(
+            AnnotationParser::parse_annotation("[&location[1]=UK,lat=0.0]").unwrap(),
+            exp
+        );
     }
 
     #[test]
     fn markov_jump() {
         let parsed = AnnotationParser::parse_annotation("[&location={{0.5,UK,US}}]").unwrap();
         let mut exp = HashMap::new();
-        exp.insert("location".to_owned(), AnnotationValue::Set(vec![AnnotationValue::MarkovJump(MarkovJump { time: 0.5, source: "UK".to_string(), destination: "US".to_string() })]));
+        exp.insert(
+            "location".to_owned(),
+            AnnotationValue::Set(vec![AnnotationValue::MarkovJump(MarkovJump {
+                time: 0.5,
+                source: "UK".to_string(),
+                destination: "US".to_string(),
+            })]),
+        );
         assert_eq!(parsed, exp);
     }
 }

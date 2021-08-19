@@ -4,13 +4,17 @@ use std::collections::HashSet;
 use structopt::StructOpt;
 
 use rand::seq::SliceRandom;
+use rebl::io::parser::tree_importer::TreeImporter;
 use std::error::Error;
 use std::io::Write;
-use rebl::io::parser::tree_importer::TreeImporter;
 
 #[derive(Debug, StructOpt)]
 pub struct SharedOptions {
-    #[structopt(short, long, help = "annotation key we are collapsing by. must be discrete")]
+    #[structopt(
+        short,
+        long,
+        help = "annotation key we are collapsing by. must be discrete"
+    )]
     annotation: String,
     #[structopt(short, long, help = "annotation value we are collapsing by")]
     value: String,
@@ -20,22 +24,30 @@ pub struct SharedOptions {
 pub enum SubCommands {
     /// annotate tips with unique clade key based on annotation
     Label {
-        #[structopt(short, long, help = "prefix for output annotation, if not provided defaults to 'annotation_value.' - Not implemented")]
+        #[structopt(
+            short,
+            long,
+            help = "prefix for output annotation, if not provided defaults to 'annotation_value.' - Not implemented"
+        )]
         prefix: Option<String>,
-        #[structopt(short, long, help = "annotation key we are collapsing by. must be discrete")]
+        #[structopt(
+            short,
+            long,
+            help = "annotation key we are collapsing by. must be discrete"
+        )]
         annotation: String,
         #[structopt(short, long, help = "annotation value we are interested in")]
         value: String,
-        #[structopt(
-        short,
-        long,
-        help = "annotate internal nodes as well"
-        )]
+        #[structopt(short, long, help = "annotate internal nodes as well")]
         internal: bool,
     },
     /// Collapse monophyletic clades
     Collapse {
-        #[structopt(short, long, help = "annotation key we are collapsing by. must be discrete")]
+        #[structopt(
+            short,
+            long,
+            help = "annotation key we are collapsing by. must be discrete"
+        )]
         annotation: String,
         #[structopt(short, long, help = "annotation value we are collapsing by")]
         value: String,
@@ -44,30 +56,45 @@ pub enum SubCommands {
     },
 }
 
-
 //TODO set random seed.
-pub fn run<R: std::io::Read, T: TreeImporter<R>>(mut trees: T,
-                                                 cmd: SubCommands) -> Result<(), Box<dyn Error>> {
+pub fn run<R: std::io::Read, T: TreeImporter<R>>(
+    mut trees: T,
+    cmd: SubCommands,
+) -> Result<(), Box<dyn Error>> {
     let stdout = std::io::stdout(); // get the global stdout entity
     let mut handle = stdout.lock(); // acquire a lock on it
 
     while trees.has_tree() {
         let mut tree = trees.read_next_tree()?;
         match cmd {
-            SubCommands::Collapse { ref annotation, ref value, min_size } => {
+            SubCommands::Collapse {
+                ref annotation,
+                ref value,
+                min_size,
+            } => {
                 let new_tree = collapse_uniform_clades(&mut tree, &annotation, &value, min_size);
                 writeln!(handle, "{}", new_tree)?;
             }
-            SubCommands::Label { ref annotation, ref value, ref prefix,ref internal } => {
-                annotate_uniform_clades(&mut tree, &annotation, &value, &prefix,&internal);
+            SubCommands::Label {
+                ref annotation,
+                ref value,
+                ref prefix,
+                ref internal,
+            } => {
+                annotate_uniform_clades(&mut tree, &annotation, &value, &prefix, &internal);
                 writeln!(handle, "{}", tree)?;
-            },
+            }
         }
     }
     Ok(())
 }
 
-pub fn collapse_uniform_clades(tree: &mut MutableTree, key: &str, value: &str, min_size: usize) -> MutableTree {
+pub fn collapse_uniform_clades(
+    tree: &mut MutableTree,
+    key: &str,
+    value: &str,
+    min_size: usize,
+) -> MutableTree {
     tree.calc_node_heights();
 
     let mut taxa: HashSet<String> = tree
@@ -77,8 +104,7 @@ pub fn collapse_uniform_clades(tree: &mut MutableTree, key: &str, value: &str, m
         .map(|n| String::from(n.unwrap()))
         .collect();
 
-    let monophyletic_groups =
-        get_monophyletic_groups(tree, tree.get_root().unwrap(), key, value);
+    let monophyletic_groups = get_monophyletic_groups(tree, tree.get_root().unwrap(), key, value);
     if monophyletic_groups.0 {
         warn!("The whole tree is a monophyletic clade!")
     }
@@ -97,24 +123,39 @@ pub fn collapse_uniform_clades(tree: &mut MutableTree, key: &str, value: &str, m
     MutableTree::from_tree(tree, &taxa)
 }
 
-fn annotate_uniform_clades(tree: &mut MutableTree, key: &str, value: &str, prefix: &Option<String>, internal: &bool) {
-    let monophyletic_groups =
-        get_monophyletic_groups(tree, tree.get_root().unwrap(), key, value);
+fn annotate_uniform_clades(
+    tree: &mut MutableTree,
+    key: &str,
+    value: &str,
+    prefix: &Option<String>,
+    internal: &bool,
+) {
+    let monophyletic_groups = get_monophyletic_groups(tree, tree.get_root().unwrap(), key, value);
     if monophyletic_groups.0 {
         warn!("The whole tree is a monophyletic clade!")
     }
     let pre = if let Some(s) = prefix {
         s.clone()
-    } else { "".to_string() };
+    } else {
+        "".to_string()
+    };
     let mut counter = 0;
     for group in monophyletic_groups.1.iter() {
         if group.len() > 1 {
             for node in group {
                 if *internal || tree.is_external(*node) {
-                    tree.annotate_node(*node, String::from("Clade"), AnnotationValue::Discrete(format!("{}_{}.{}", pre, value, counter)));
+                    tree.annotate_node(
+                        *node,
+                        String::from("Clade"),
+                        AnnotationValue::Discrete(format!("{}_{}.{}", pre, value, counter)),
+                    );
                 }
-                if *internal || !tree.is_external(*node){
-                    tree.annotate_node(*node, String::from(key), AnnotationValue::Discrete(String::from(value)));
+                if *internal || !tree.is_external(*node) {
+                    tree.annotate_node(
+                        *node,
+                        String::from(key),
+                        AnnotationValue::Discrete(String::from(value)),
+                    );
                 }
             }
             counter += 1;
@@ -142,13 +183,11 @@ fn get_monophyletic_groups(
                     panic!("not a discrete trait")
                 }
             }
-        }else{
-            return (false, vec![vec![]])
-
+        } else {
+            return (false, vec![vec![]]);
         }
         // ignoring empty nodes they are counted
         // panic!("Annotation not found on a tip: {}. all tips must be annotated", tree.get_taxon(node_ref).unwrap_or("no label"));
-
     }
 
     let mut child_output = vec![];
@@ -172,7 +211,7 @@ fn get_monophyletic_groups(
             .flatten()
             .collect::<Vec<TreeIndex>>();
         combined_child_tips.push(node_ref);
-            (true, vec![combined_child_tips])
+        (true, vec![combined_child_tips])
     } else {
         let child_tips = child_output
             .into_iter()
@@ -184,4 +223,3 @@ fn get_monophyletic_groups(
         (false, child_tips)
     }
 }
-

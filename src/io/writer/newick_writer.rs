@@ -26,9 +26,13 @@ fn write_node(tree: &MutableTree, node_ref: TreeIndex) -> String {
     if tree.is_external(node_ref) {
         if let Some(taxon_string) = tree.get_taxon(node_ref) {
             let quoted = taxon_string.contains(char::is_whitespace);
-            if quoted{s.push('\'')}
+            if quoted {
+                s.push('\'')
+            }
             s.push_str(taxon_string);
-            if quoted{s.push('\'')}
+            if quoted {
+                s.push('\'')
+            }
         }
     } else {
         s.push('(');
@@ -44,7 +48,6 @@ fn write_node(tree: &MutableTree, node_ref: TreeIndex) -> String {
     s.push_str(write_annotations(tree, node_ref).as_str());
     if let Some(label) = tree.get_node_label(node_ref) {
         s.push_str(label);
-
     }
     if let Some(l) = tree.get_length(node_ref) {
         s.push(':');
@@ -78,8 +81,10 @@ fn write_annotations(tree: &MutableTree, node_ref: TreeIndex) -> String {
 
 pub fn write_annotation(key: &str, value: Option<&AnnotationValue>) -> String {
     if let Some(annotation) = value {
-        let value_string = match annotation{
-            AnnotationValue::Discrete(_)=>"\"".to_string()+annotation.to_string().as_str()+"\"",
+        let value_string = match annotation {
+            AnnotationValue::Discrete(_) => {
+                "\"".to_string() + annotation.to_string().as_str() + "\""
+            }
             _ => annotation.to_string(),
         };
         format!("{}={}", key, value_string)
@@ -90,9 +95,9 @@ pub fn write_annotation(key: &str, value: Option<&AnnotationValue>) -> String {
 
 #[cfg(test)]
 mod tests {
+    use crate::io::parser::newick_importer::NewickImporter;
     use crate::tree::fixed_tree::FixedNode;
     use crate::tree::mutable_tree::MutableTree;
-    use crate::io::parser::newick_importer::NewickImporter;
     use std::io::BufReader;
 
     #[test]
@@ -115,22 +120,27 @@ mod tests {
     }
     #[test]
     fn tree_with_quoted_annotations() {
-        let s = "((A[&location=\"UK\"]:0.3,B[&location=\"USA\"]:0.05):0.9,C[&location=\"US\"]:0.1);";
-        let tree = NewickImporter::read_tree(BufReader::new(s.as_bytes())).expect("error in parsing");
-        assert_eq!( tree.to_string(),s)
+        let s =
+            "((A[&location=\"UK\"]:0.3,B[&location=\"USA\"]:0.05):0.9,C[&location=\"US\"]:0.1);";
+        let tree =
+            NewickImporter::read_tree(BufReader::new(s.as_bytes())).expect("error in parsing");
+        assert_eq!(tree.to_string(), s)
     }
     #[test]
     fn tree_with_unquoted_annotations() {
         let s = "((A[&location=UK]:0.3,B[&location=USA]:0.05):0.9,C[&location=US]:0.1);";
-        let tree = NewickImporter::read_tree(BufReader::new(s.as_bytes())).expect("error in parsing");
-       let exp = "((A[&location=\"UK\"]:0.3,B[&location=\"USA\"]:0.05):0.9,C[&location=\"US\"]:0.1);";
+        let tree =
+            NewickImporter::read_tree(BufReader::new(s.as_bytes())).expect("error in parsing");
+        let exp =
+            "((A[&location=\"UK\"]:0.3,B[&location=\"USA\"]:0.05):0.9,C[&location=\"US\"]:0.1);";
 
-        assert_eq!( tree.to_string(),exp)
+        assert_eq!(tree.to_string(), exp)
     }
     #[test]
     fn tree_with_label() {
         let s = "((A:0.3,B:0.05)label:0.9,C:0.1);";
-        let tree = NewickImporter::read_tree(BufReader::new(s.as_bytes())).expect("error in parsing");
+        let tree =
+            NewickImporter::read_tree(BufReader::new(s.as_bytes())).expect("error in parsing");
         println!("{:?}", tree.get_internal_node(1));
         let exp = "((A:0.3,B:0.05)label:0.9,C:0.1);";
 
@@ -140,9 +150,10 @@ mod tests {
     #[test]
     fn tree_with_quotes() {
         let s = "((A[&location=UK]:0.3,B[&location=USA]:0.05):0.9,'C d'[&location=US]:0.1);";
-        let tree = NewickImporter::read_tree(BufReader::new(s.as_bytes())).expect("error in parsing");
+        let tree =
+            NewickImporter::read_tree(BufReader::new(s.as_bytes())).expect("error in parsing");
         let exp = "((A[&location=\"UK\"]:0.3,B[&location=\"USA\"]:0.05):0.9,'C d'[&location=\"US\"]:0.1);";
 
-        assert_eq!(tree.to_string(),exp)
+        assert_eq!(tree.to_string(), exp)
     }
 }

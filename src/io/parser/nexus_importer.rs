@@ -1,10 +1,10 @@
-use std::io::{BufReader, Read};
-use crate::tree::mutable_tree::{MutableTree, TreeIndex};
-use std::collections::{HashMap, HashSet};
-use crate::tree::AnnotationValue;
 use crate::io::error::IoError;
 use crate::io::parser::annotation_parser::AnnotationParser;
 use crate::io::parser::tree_importer::TreeImporter;
+use crate::tree::mutable_tree::{MutableTree, TreeIndex};
+use crate::tree::AnnotationValue;
+use std::collections::{HashMap, HashSet};
+use std::io::{BufReader, Read};
 
 type Byte = u8;
 type Result<T> = std::result::Result<T, IoError>;
@@ -17,7 +17,7 @@ pub struct NexusImporter<R> {
     last_deliminator: u8,
     last_annotation: Option<HashMap<String, AnnotationValue>>,
     taxa: HashSet<String>,
-    taxa_translation:Option<HashMap<String, String>>,
+    taxa_translation: Option<HashMap<String, String>>,
     // TODO make taxon
     reading_trees: bool,
 }
@@ -60,7 +60,7 @@ impl<R: std::io::Read> NexusImporter<R> {
     fn prep_for_trees(&mut self) -> Result<()> {
         loop {
             let block = self.find_next_block();
-            debug!("found {:?} block",block);
+            debug!("found {:?} block", block);
             match block {
                 Ok(NexusBlock::Taxa) => self.read_taxa_block()?,
                 Ok(NexusBlock::Trees) => {
@@ -77,7 +77,6 @@ impl<R: std::io::Read> NexusImporter<R> {
         Ok(())
     }
 
-
     fn find_next_block(&mut self) -> Result<NexusBlock> {
         loop {
             let token = self.read_token("")?;
@@ -91,7 +90,9 @@ impl<R: std::io::Read> NexusImporter<R> {
         } else if block.eq_ignore_ascii_case("trees") {
             Ok(NexusBlock::Trees)
         } else {
-            Err(IoError::Format("unsupported nexus block ".to_string() + &*block))
+            Err(IoError::Format(
+                "unsupported nexus block ".to_string() + &*block,
+            ))
         }
     }
     // fn find_end_block(&mut self) -> Result<()> {
@@ -127,7 +128,7 @@ impl<R: std::io::Read> NexusImporter<R> {
                 if self.last_deliminator == b';' {
                     break;
                 }
-            };
+            }
             if taxa_count != self.taxa.len() {
                 panic!("taxa count does not match ntax tag")
             };
@@ -144,16 +145,20 @@ impl<R: std::io::Read> NexusImporter<R> {
         if token.eq_ignore_ascii_case("TRANSLATE") {
             debug!("reading translation list");
 
-            let mut taxa_map:HashMap<String,String> = HashMap::new();
+            let mut taxa_map: HashMap<String, String> = HashMap::new();
             loop {
                 let key = self.read_token(",;")?;
                 if self.last_deliminator == b',' || self.last_deliminator == b';' {
-                    break Err(IoError::Format("missing taxon label in translate section of trees block".to_string()));
+                    break Err(IoError::Format(
+                        "missing taxon label in translate section of trees block".to_string(),
+                    ));
                 } else {
                     let taxon = self.read_token(",;")?;
                     //TODO build from Taxa block if needed
                     if let Some(key) = taxa_map.insert(key, taxon) {
-                        break Err(IoError::Format("translate map uses ".to_string() + &key + "twice"));
+                        break Err(IoError::Format(
+                            "translate map uses ".to_string() + &key + "twice",
+                        ));
                     }
                 }
                 if self.last_deliminator == b';' {
@@ -168,9 +173,8 @@ impl<R: std::io::Read> NexusImporter<R> {
         }
     }
 
-
     fn read_internal_node(&mut self) -> Result<TreeIndex> {
-         self.read_byte()?;
+        self.read_byte()?;
         //assert =='('
         let mut children = vec![self.read_branch()?];
 
@@ -182,7 +186,10 @@ impl<R: std::io::Read> NexusImporter<R> {
         // should have had a closing ')'
         if self.last_deliminator != b')' {
             // throw new BadFormatException("Missing closing ')' in tree");
-            panic!("BadFormat should end internal node with ')' but found {}",char::from(self.last_deliminator))
+            panic!(
+                "BadFormat should end internal node with ')' but found {}",
+                char::from(self.last_deliminator)
+            )
         } else {
             let label = self.read_token(",:();")?;
             let node = self.get_tree().make_internal_node(children);
@@ -196,11 +203,14 @@ impl<R: std::io::Read> NexusImporter<R> {
     }
     fn read_external_node(&mut self) -> Result<TreeIndex> {
         let mut label = self.read_token(",:();")?; //TODO end the nightmare of string str conversion
-        if let Some(taxa_map)=&self.taxa_translation{
+        if let Some(taxa_map) = &self.taxa_translation {
             label = taxa_map.get(&*label).unwrap().to_string();
         }
-        let node = self.get_tree().make_external_node(label.as_str(), None).expect("Failed to make tip");
-        trace!("read tip {} as node {}", label,node);
+        let node = self
+            .get_tree()
+            .make_external_node(label.as_str(), None)
+            .expect("Failed to make tip");
+        trace!("read tip {} as node {}", label, node);
 
         self.annotation_node(node);
 
@@ -216,7 +226,11 @@ impl<R: std::io::Read> NexusImporter<R> {
             // is an external node
             self.read_external_node()?
         };
-        trace!("expect bl  for node {:?} with deliminator {}",branch,char::from(self.last_deliminator));
+        trace!(
+            "expect bl  for node {:?} with deliminator {}",
+            branch,
+            char::from(self.last_deliminator)
+        );
         if self.last_deliminator == b':' {
             trace!("reading branch length");
             length = self.read_double(",():;")?;
@@ -238,9 +252,7 @@ impl<R: std::io::Read> NexusImporter<R> {
                 self.last_byte = Some(c);
                 Ok(c)
             }
-            Some(c) => {
-                Ok(c)
-            }
+            Some(c) => Ok(c),
         }
     }
     fn read_byte(&mut self) -> Result<Byte> {
@@ -289,28 +301,28 @@ impl<R: std::io::Read> NexusImporter<R> {
                 space = 0;
             } else if ch == b'[' {
                 self.skip_comments(ch)?;
-                self.last_deliminator=b' ';
+                self.last_deliminator = b' ';
                 done = true
             } else if quoted {
-                    if is_space {
-                        space += 1;
-                        ch = b' ';
-                    } else {
-                        space = 0;
-                    }
-                    if space < 2 {
-                        token.push(char::from(ch));
-                    }
-                } else if is_space {
-                    self.last_deliminator = b' ';
-                    done = true;
-                } else if delims.contains(&ch) {
-                    done = true;
-                    self.last_deliminator = ch;
+                if is_space {
+                    space += 1;
+                    ch = b' ';
                 } else {
-                    token.push(char::from(ch));
-                    first = false;
+                    space = 0;
                 }
+                if space < 2 {
+                    token.push(char::from(ch));
+                }
+            } else if is_space {
+                self.last_deliminator = b' ';
+                done = true;
+            } else if delims.contains(&ch) {
+                done = true;
+                self.last_deliminator = ch;
+            } else {
+                token.push(char::from(ch));
+                first = false;
+            }
         }
         if char::from(self.last_deliminator).is_whitespace() {
             let mut ch = self.next_byte()?;
@@ -333,7 +345,7 @@ impl<R: std::io::Read> NexusImporter<R> {
 
         match s.parse() {
             Ok(l) => Ok(l),
-            Err(e) => panic!("{} : {}",e,s)
+            Err(e) => panic!("{} : {}", e, s),
         }
     }
     fn read_int(&mut self, deliminator: &str) -> Result<usize> {
@@ -342,20 +354,18 @@ impl<R: std::io::Read> NexusImporter<R> {
 
         match s.parse() {
             Ok(l) => Ok(l),
-            Err(e) => panic!("{}",e)
+            Err(e) => panic!("{}", e),
         }
     }
 
     fn read(&mut self) -> Result<Byte> {
         let mut buf: [u8; 1] = [0; 1];
         match self.last_byte {
-            None => {
-                match self.reader.read(&mut buf) {
-                    Ok(1) => Ok(buf[0]),
-                    Ok(0) => Err(IoError::Eof),
-                    _ => Err(IoError::Other)
-                }
-            }
+            None => match self.reader.read(&mut buf) {
+                Ok(1) => Ok(buf[0]),
+                Ok(0) => Err(IoError::Eof),
+                _ => Err(IoError::Other),
+            },
             Some(c) => {
                 self.last_byte = None;
                 Ok(c)
@@ -416,16 +426,20 @@ impl<R: std::io::Read> NexusImporter<R> {
 impl<R: std::io::Read> TreeImporter<R> for NexusImporter<R> {
     fn has_tree(&mut self) -> bool {
         if !self.reading_trees {
-            self.prep_for_trees().expect("Parsing error prior. Never found trees");
+            self.prep_for_trees()
+                .expect("Parsing error prior. Never found trees");
         }
-         self.reading_trees && self.last_token.eq_ignore_ascii_case("TREE") || self.last_token.eq_ignore_ascii_case("UTREE")
+        self.reading_trees && self.last_token.eq_ignore_ascii_case("TREE")
+            || self.last_token.eq_ignore_ascii_case("UTREE")
     }
 
     fn read_next_tree(&mut self) -> Result<MutableTree> {
         if !self.reading_trees {
             self.prep_for_trees()?;
         }
-        if self.last_token.eq_ignore_ascii_case("UTREE") || self.last_token.eq_ignore_ascii_case("TREE") {
+        if self.last_token.eq_ignore_ascii_case("UTREE")
+            || self.last_token.eq_ignore_ascii_case("TREE")
+        {
             let start = std::time::Instant::now();
             self.tree = Some(MutableTree::new());
             if self.last_byte == Some(b'*') {
@@ -442,7 +456,10 @@ impl<R: std::io::Read> TreeImporter<R> for NexusImporter<R> {
             }
 
             if self.next_byte()? != b'(' {
-                panic!("{}","Missing tree definition in TREE command of TREES block".to_string())
+                panic!(
+                    "{}",
+                    "Missing tree definition in TREE command of TREES block".to_string()
+                )
             } else {
                 let rooted_comment = self.last_annotation.take();
                 let root = self.read_internal_node()?;
@@ -476,13 +493,19 @@ impl<R: std::io::Read> TreeImporter<R> for NexusImporter<R> {
                         self.read_token(";")?;
                         Ok(self.tree.take().unwrap())
                     }
-                    _ => Err(IoError::Format("You may need to read to check for a root branch or annotation".to_string()))
+                    _ => Err(IoError::Format(
+                        "You may need to read to check for a root branch or annotation".to_string(),
+                    )),
                 }
             }
-        } else if self.last_token.eq_ignore_ascii_case("ENDBLOCK") || self.last_token.eq_ignore_ascii_case("END") {
+        } else if self.last_token.eq_ignore_ascii_case("ENDBLOCK")
+            || self.last_token.eq_ignore_ascii_case("END")
+        {
             Err(IoError::Eof)
         } else {
-            Err(IoError::Format(String::from("unknown command in tree block") + &*self.last_token))
+            Err(IoError::Format(
+                String::from("unknown command in tree block") + &*self.last_token,
+            ))
         }
     }
 }
@@ -495,17 +518,14 @@ impl<R: std::io::Read> Iterator for NexusImporter<R> {
         };
         match self.reading_trees {
             false => None,
-            true => {
-                match self.read_next_tree() {
-                    Ok(node) => Some(node),
-                    Err(IoError::Eof) => None,
-                    Err(e) => panic!("parsing error {}", e),
-                }
-            }
+            true => match self.read_next_tree() {
+                Ok(node) => Some(node),
+                Err(IoError::Eof) => None,
+                Err(e) => panic!("parsing error {}", e),
+            },
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -604,7 +624,8 @@ mod tests {
         let mut correct = false;
         for tree in trees {
             let root = tree.get_root().unwrap();
-            if let Some(AnnotationValue::Discrete(location)) = tree.get_annotation(root, "location") {
+            if let Some(AnnotationValue::Discrete(location)) = tree.get_annotation(root, "location")
+            {
                 if location == "UK" {
                     correct = true;
                 }

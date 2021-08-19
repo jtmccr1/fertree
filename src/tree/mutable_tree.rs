@@ -1,9 +1,9 @@
 use super::fixed_tree::FixedNode;
 use super::AnnotationValue;
+use std::cmp::Ordering;
 use std::collections::hash_map::Keys;
 use std::collections::{HashMap, HashSet};
 use std::option::Option;
-use std::cmp::Ordering;
 
 pub type TreeIndex = usize;
 
@@ -70,7 +70,7 @@ impl MutableTree {
             internal_nodes: vec![],
             annotation_type: Default::default(),
             taxon_node_map: Default::default(),
-            label_node_map:Default::default(),
+            label_node_map: Default::default(),
             root: None,
             heights_known: false,
             branchlengths_known: false,
@@ -139,8 +139,8 @@ impl MutableTree {
         let mut me = MutableTree::new();
         me.tree_helper(tree, node, taxa);
         me.heights_known = true;
-        trace!("in tree: {}",me.branchlengths_known);
-        trace!("in tree: {}",me.heights_known);
+        trace!("in tree: {}", me.branchlengths_known);
+        trace!("in tree: {}", me.heights_known);
         me
     }
     fn tree_helper(
@@ -182,9 +182,11 @@ impl MutableTree {
                 }
                 visited += 1;
             }
-            match children.len().cmp(&1){
-                Ordering::Less => {panic!("should have caught this error before this line!")}
-                Ordering::Equal => { Some(children[0])}
+            match children.len().cmp(&1) {
+                Ordering::Less => {
+                    panic!("should have caught this error before this line!")
+                }
+                Ordering::Equal => Some(children[0]),
                 Ordering::Greater => {
                     new_node = Some(self.make_root_node(children));
                     self.set_height(
@@ -197,7 +199,8 @@ impl MutableTree {
                     for (key, value) in annotation_map.iter() {
                         self.annotate_node(new_node.unwrap(), key.clone(), value.clone());
                     }
-                    new_node}
+                    new_node
+                }
             }
         }
     }
@@ -237,45 +240,43 @@ impl MutableTree {
         }
     }
 
-    pub fn calc_relative_node_heights(&mut self,origin:f64) {
-            self.heights_known = true;
-            self.calc_height_above_root();
-            let mut rtt = 0.0;
-            for node_ref in self.external_nodes.iter() {
-                let h = self.get_height(*node_ref).unwrap();
-                if h > rtt {
-                    rtt = h;
-                }
+    pub fn calc_relative_node_heights(&mut self, origin: f64) {
+        self.heights_known = true;
+        self.calc_height_above_root();
+        let mut rtt = 0.0;
+        for node_ref in self.external_nodes.iter() {
+            let h = self.get_height(*node_ref).unwrap();
+            if h > rtt {
+                rtt = h;
             }
+        }
 
-            let mut i = 0;
-            while i < self.nodes.len() {
-                let height = origin-(rtt - self.get_height(i).unwrap());
-                self.set_height(i, height);
-                i += 1;
-            }
-
-    }
-
-    pub fn calculate_branchlengths(&mut self) {
-       if  !self.branchlengths_known {
-
-        self.branchlengths_known = true;
         let mut i = 0;
         while i < self.nodes.len() {
-            if i != self.root.expect("how is this tree not rooted") {
-                let length = self
-                    .get_height(
-                        self.get_parent(i)
-                            .expect("node does not have a parent in tree"),
-                    )
-                    .expect("parent node should have height")
-                    - self.get_height(i).expect("node should have height");
-                self.set_length(i, length);
-            }
+            let height = origin - (rtt - self.get_height(i).unwrap());
+            self.set_height(i, height);
             i += 1;
         }
     }
+
+    pub fn calculate_branchlengths(&mut self) {
+        if !self.branchlengths_known {
+            self.branchlengths_known = true;
+            let mut i = 0;
+            while i < self.nodes.len() {
+                if i != self.root.expect("how is this tree not rooted") {
+                    let length = self
+                        .get_height(
+                            self.get_parent(i)
+                                .expect("node does not have a parent in tree"),
+                        )
+                        .expect("parent node should have height")
+                        - self.get_height(i).expect("node should have height");
+                    self.set_length(i, length);
+                }
+                i += 1;
+            }
+        }
     }
     fn calc_height_above_root(&mut self) {
         let preorder = self.preorder_iter();
@@ -299,7 +300,11 @@ impl MutableTree {
         self.branchlengths_known = false;
     }
 
-    pub fn make_external_node(&mut self, taxon: &str, taxa_set: Option<&HashSet<String>>) -> Option<TreeIndex> {
+    pub fn make_external_node(
+        &mut self,
+        taxon: &str,
+        taxa_set: Option<&HashSet<String>>,
+    ) -> Option<TreeIndex> {
         if let Some(taxa) = taxa_set {
             if taxa.contains(taxon) {
                 let index = self.nodes.len();
@@ -527,7 +532,7 @@ impl MutableTree {
     pub fn set_label(&mut self, index: TreeIndex, label: String) {
         let node = self.get_node_mut(index).expect("node not in tree");
         node.label = Some(label.clone());
-        self.label_node_map.insert(label,index);
+        self.label_node_map.insert(label, index);
     }
 
     pub fn set_length(&mut self, index: TreeIndex, bl: f64) {
@@ -558,12 +563,12 @@ impl MutableTree {
             let annotation_type = std::mem::discriminant(annotation);
 
             if value_type == annotation_type {
-            let node = self.get_unwrapped_node_mut(index);
+                let node = self.get_unwrapped_node_mut(index);
                 node.annotations.insert(key, value);
-            } else if let AnnotationValue::Continuous(c)=value{
-                    warn!("coercing {} to string for annotation {}",c,key.as_str());
-                    self.annotate_node(index,key,AnnotationValue::Discrete(c.to_string())) ;
-            }else{
+            } else if let AnnotationValue::Continuous(c) = value {
+                warn!("coercing {} to string for annotation {}", c, key.as_str());
+                self.annotate_node(index, key, AnnotationValue::Discrete(c.to_string()));
+            } else {
                 panic!("tried to annotate node with an missmatched annotation type for {}, found {} expected {}",key.as_str(),&value,&annotation);
             }
         } else {
@@ -586,7 +591,7 @@ impl MutableTree {
                         key.clone(),
                         AnnotationValue::Set(vec![AnnotationValue::Discrete("0".to_string())]),
                     );
-                },
+                }
                 AnnotationValue::MarkovJump(_) => {
                     panic!("Markov jumps must be in sets of annotations not single.");
                 }
@@ -621,7 +626,7 @@ impl MutableTree {
     pub fn set_id(&mut self, id: String) {
         self.id = Some(id);
     }
-    pub fn get_id(&self) ->Option<&str>{
+    pub fn get_id(&self) -> Option<&str> {
         self.id.as_deref()
     }
 }

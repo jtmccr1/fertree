@@ -1,11 +1,11 @@
+use rebl::io::parser::tree_importer::TreeImporter;
 use std::error::Error;
 use std::io::Write;
 use structopt::StructOpt;
-use rebl::io::parser::tree_importer::TreeImporter;
 
 #[derive(Debug, StructOpt)]
 pub enum SubCommands {
-    Nodes
+    Nodes,
 }
 
 fn general_stats<R: std::io::Read, T: TreeImporter<R>>(mut trees: T) -> Result<(), Box<dyn Error>> {
@@ -77,4 +77,3 @@ pub fn run<R: std::io::Read, T: TreeImporter<R>>(
         Some(SubCommands::Nodes) => nodes(trees),
     }
 }
-
