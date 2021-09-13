@@ -123,12 +123,13 @@ impl MutableTree {
             self.fixed_node_helper(child, Some(index));
         }
     }
-
-    pub fn from_tree(tree: &MutableTree, taxa: &HashSet<String>) -> Self {
+    //TODO refactor to return error for node heights
+    pub fn from_tree(tree: &mut MutableTree, taxa: &HashSet<String>) -> Self {
         let mut me = MutableTree::new();
         let root = tree
             .get_root()
             .expect("every tree should have a root at least nominally");
+        tree.calc_node_heights();
         me.tree_helper(tree, root, taxa);
         me.heights_known = true;
         me.calculate_branchlengths();
@@ -153,16 +154,21 @@ impl MutableTree {
         if tree.get_num_children(node) == 0 {
             //make external node
             if let Some(taxon) = &tree.get_unwrapped_node(node).taxon {
-                new_node = self.make_external_node(taxon, Some(&taxa));
-                self.set_height(
-                    new_node.unwrap(),
-                    tree.get_height(node)
-                        .expect("found a node without a height"),
-                );
-                // copy annotations
-                let annotation_map = &tree.get_unwrapped_node(node).annotations;
-                for (key, value) in annotation_map.iter() {
-                    self.annotate_node(new_node.unwrap(), key.clone(), value.clone());
+                if (taxa.contains(taxon)) {
+                    new_node = self.make_external_node(taxon, Some(&taxa));
+                    self.set_height(
+                        new_node.expect(&*format!(
+                            "Taxa {}, not found in taxon set {:?}",
+                            &taxon, taxa
+                        )),
+                        tree.get_height(node)
+                            .expect("found a node without a height"),
+                    );
+                    // copy annotations
+                    let annotation_map = &tree.get_unwrapped_node(node).annotations;
+                    for (key, value) in annotation_map.iter() {
+                        self.annotate_node(new_node.unwrap(), key.clone(), value.clone());
+                    }
                 }
             }
             new_node
@@ -183,9 +189,7 @@ impl MutableTree {
                 visited += 1;
             }
             match children.len().cmp(&1) {
-                Ordering::Less => {
-                    panic!("should have caught this error before this line!")
-                }
+                Ordering::Less => None,
                 Ordering::Equal => Some(children[0]),
                 Ordering::Greater => {
                     new_node = Some(self.make_root_node(children));

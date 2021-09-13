@@ -2,6 +2,7 @@ pub mod annotate;
 pub mod branchlengths;
 pub mod clades;
 pub mod extract;
+pub mod prune;
 pub mod resolve;
 pub mod split;
 pub mod stats;

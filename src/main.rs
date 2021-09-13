@@ -80,6 +80,12 @@ enum Fertree {
         )]
         min_size: Option<usize>,
     },
+    /// Sample n tips from a tree .
+    ///
+    Prune {
+        #[structopt(subcommand)]
+        cmd: commands::prune::SubCommands,
+    },
     /// Resolve polytomies with branches of 0 or nodes spread out between constraints
     Resolve {
         #[structopt(subcommand)]
@@ -217,6 +223,7 @@ fn run_commands<R: std::io::Read, T: TreeImporter<R>>(
         } => commands::split::run(tree_importer, min_size, explore, !relaxed),
         Fertree::Resolve { cmd } => commands::resolve::run(tree_importer, cmd),
         Fertree::Brlen { cmd } => commands::branchlengths::run(tree_importer, cmd),
+        Fertree::Prune { cmd } => commands::prune::run(tree_importer, cmd),
         Fertree::TransmissionLineages {
             key,
             ignore_taxa,
