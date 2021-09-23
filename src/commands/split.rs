@@ -159,12 +159,16 @@ pub fn run<R: std::io::Read, T: TreeImporter<R>>(
                     info!("tree: {} - {} tips", i, subtree.tips);
                 }
             }
+            // TODO making these trees is much too slow
             if !explore {
+                let mut i=0;
                 for subtree in searcher.subtrees {
+                    debug!("writing tree: {} - {} tips", i, subtree.tips);
                     let mut st = MutableTree::copy_subtree(&searcher.tree, subtree.root, taxa);
                     st.calculate_branchlengths();
 
                     writeln!(handle, "{}", st)?;
+                    i+=1;
                 }
             }
         }

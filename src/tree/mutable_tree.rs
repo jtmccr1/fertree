@@ -169,6 +169,7 @@ impl MutableTree {
                     for (key, value) in annotation_map.iter() {
                         self.annotate_node(new_node.unwrap(), key.clone(), value.clone());
                     }
+                    trace!("made {:?} node with taxa {}", new_node,taxon)
                 }
             }
             new_node
