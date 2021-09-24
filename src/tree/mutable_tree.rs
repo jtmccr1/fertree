@@ -150,6 +150,7 @@ impl MutableTree {
         node: TreeIndex,
         taxa: &HashSet<String>,
     ) -> Option<TreeIndex> {
+        trace!("call");
         let mut new_node = None;
         if tree.get_num_children(node) == 0 {
             //make external node

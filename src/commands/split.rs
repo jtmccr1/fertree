@@ -1,4 +1,5 @@
 use rebl::io::parser::tree_importer::TreeImporter;
+use rebl::io::writer::newick_writer::write_newick_subtree;
 use rebl::tree::mutable_tree::{MutableTree, TreeIndex};
 use std::collections::HashSet;
 use std::error::Error;
@@ -114,7 +115,7 @@ pub fn run<R: std::io::Read, T: TreeImporter<R>>(
     }
     while trees.has_tree() {
         let mut starting_tree = trees.read_next_tree()?;
-        starting_tree.calc_node_heights();
+        // starting_tree.calc_node_heights();
         trace!("starting to split");
         let mut searcher = SubtreeSearcher {
             tree: starting_tree,
@@ -139,12 +140,6 @@ pub fn run<R: std::io::Read, T: TreeImporter<R>>(
         } else {
             searcher
                 .collate_subtrees(min_clade_size.expect("min-clade should be set to an integer"));
-            let taxa = &searcher
-                .tree
-                .external_nodes
-                .iter()
-                .map(|n| searcher.tree.get_taxon(*n).unwrap().to_string())
-                .collect::<HashSet<String>>();
             searcher.finalize_selection();
             info!("found {} trees", searcher.subtrees.len());
 
@@ -161,14 +156,10 @@ pub fn run<R: std::io::Read, T: TreeImporter<R>>(
             }
             // TODO making these trees is much too slow
             if !explore {
-                let mut i=0;
+                let mut i = 0;
                 for subtree in searcher.subtrees {
                     debug!("writing tree: {} - {} tips", i, subtree.tips);
-                    let mut st = MutableTree::copy_subtree(&searcher.tree, subtree.root, taxa);
-                    st.calculate_branchlengths();
-
-                    writeln!(handle, "{}", st)?;
-                    i+=1;
+                    writeln!(handle, "{}", write_newick_subtree(&searcher.tree, subtree.root))?;
                 }
             }
         }

@@ -9,7 +9,7 @@ impl fmt::Display for MutableTree {
     }
 }
 
-fn write_newick(tree: &MutableTree) -> String {
+pub fn write_newick(tree: &MutableTree) -> String {
     //TODO check if branchlengths known and throw error if not known. Need io erro
     if !tree.branchlengths_known {
         panic!("tried to write  a tree without branchlengths known! calculate them first!")
@@ -19,6 +19,15 @@ fn write_newick(tree: &MutableTree) -> String {
     s
 }
 
+pub fn write_newick_subtree(tree: &MutableTree,node:TreeIndex) -> String {
+    //TODO check if branchlengths known and throw error if not known. Need io erro
+    if !tree.branchlengths_known {
+        panic!("tried to write  a tree without branchlengths known! calculate them first!")
+    }
+    let mut s = write_node(tree, node);
+    s.push(';');
+    s
+}
 //TODO write without annotation
 
 fn write_node(tree: &MutableTree, node_ref: TreeIndex) -> String {
