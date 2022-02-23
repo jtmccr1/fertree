@@ -10,9 +10,11 @@ use std::io::Write;
 use std::path;
 use std::path::Path;
 use structopt::StructOpt;
+use rand_distr::{Poisson, Distribution};
 
 #[derive(Debug, StructOpt)]
 pub enum SubCommands {
+    //Scale all branches in the tree by a factor
     Scale {
         #[structopt(
             short,
@@ -22,6 +24,7 @@ pub enum SubCommands {
         )]
         scalar: f64,
     },
+    // set the min allowed length for a branch in the tree
     MinLength {
         #[structopt(
             short,
@@ -31,6 +34,7 @@ pub enum SubCommands {
         )]
         min_length: f64,
     },
+    // round length to integer
     Round,
     /// Convert the mutations annotations from treetime into an integer count of mutations
     TreeTime {
@@ -47,6 +51,16 @@ pub enum SubCommands {
         )]
         file: path::PathBuf,
     },
+    // Sample lengths from a poisson distribution based on current lengths and a rate
+    Poisson{
+        #[structopt(
+        short,
+        long,
+        help = "set branch to random number of mutations from poisson, based on pergenome substitution rate",
+        default_value = "1"
+        )]
+        rate: f64,
+    }
 }
 #[derive(Debug, StructOpt)]
 pub enum TreeTimeSubCommands {
@@ -83,6 +97,7 @@ pub fn run<R: std::io::Read, T: TreeImporter<R>>(
                 tree_time(&mut tree, sub_cmd);
             }
             SubCommands::Set { ref file } => from_file(&mut tree, file),
+            SubCommands::Poisson { rate} =>poisson(&mut tree, rate)
         }
         writeln!(handle, "{}", tree)?;
     }
@@ -96,6 +111,19 @@ fn scale(tree: &mut MutableTree, scalar: f64) {
         }
     }
 }
+fn poisson(tree: & mut MutableTree, rate:f64){
+    for i in 0..tree.get_node_count() {
+        if let Some(l) = tree.get_length(i) {
+            let r = rate*l;
+
+            let poi = Poisson::new(r).unwrap();
+            let v = poi.sample(&mut rand::thread_rng());
+
+            tree.set_length(i, v);
+        }
+    }
+}
+
 fn min_length(tree: &mut MutableTree, min_length: f64) {
     for i in 0..tree.get_node_count() {
         if let Some(l) = tree.get_length(i) {
@@ -172,6 +200,8 @@ fn tree_time(tree: &mut MutableTree, cmd: &TreeTimeSubCommands) {
         }
     }
 }
+
+
 
 #[cfg(test)]
 mod tests {
