@@ -29,6 +29,12 @@ struct Cli {
 
 #[derive(Debug, StructOpt)]
 enum Fertree {
+    ///Change the format of a tree
+    Format{
+        #[structopt(subcommand)]
+        cmd:commands::format::SubCommands,
+
+    },
     /// A few useful stats about the trees
     Stats {
         #[structopt(subcommand)]
@@ -212,6 +218,7 @@ fn run_commands<R: std::io::Read, T: TreeImporter<R>>(
     cmd: Fertree,
 ) -> Result<(), Box<dyn Error>> {
     match cmd {
+        Fertree::Format { cmd } => commands::format::run(tree_importer, cmd),
         Fertree::Stats { cmd } => commands::stats::run(tree_importer, cmd),
         Fertree::Annotate { traits } => commands::annotate::run(tree_importer, traits),
         Fertree::Extract { cmd } => commands::extract::run(tree_importer, cmd),

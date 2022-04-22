@@ -9,7 +9,8 @@ pub type TreeIndex = usize;
 
 //TODO think more about missing data. Should these be options? Should they be guaranteed
 //TODO add tree annotation
-//TODO adopt nodeorder
+//TODO adopt nodeorder 
+//TODO hide this public things and get them from the tree
 #[derive(Debug)]
 pub struct MutableTreeNode {
     pub taxon: Option<String>,

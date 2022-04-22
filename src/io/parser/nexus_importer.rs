@@ -270,7 +270,7 @@ impl<R: std::io::Read> NexusImporter<R> {
     fn skip_until(&mut self, c: Byte) -> Result<Byte> {
         let mut ch: Byte = self.read_byte()?;
         while ch != c {
-            ch = self.read_byte()?;
+            ch = self.read()?;
         }
         Ok(ch)
     }
@@ -443,7 +443,6 @@ impl<R: std::io::Read> TreeImporter<R> for NexusImporter<R> {
         if self.has_tree(){
             self.skip_until(b';');
             self.read_token(";");
-            println!("{}", self.last_token);
         }
     }
     fn read_next_tree(&mut self) -> Result<MutableTree> {

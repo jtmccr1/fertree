@@ -107,11 +107,13 @@ fn tree<R: std::io::Read, T: TreeImporter<R>>(
     if let Some(i) = index {
         let mut k = 0;
         while trees.has_tree() & !found {
-            let tree = trees.read_next_tree()?;
+            // let tree = trees.read_next_tree()?;
             if k == i {
+                let tree = trees.read_next_tree()?;
                 writeln!(handle, "{}", tree)?;
                 found = true;
             }
+            trees.skip_tree();
             k += 1;
         }
     } else if let Some(tree_id) = id {
