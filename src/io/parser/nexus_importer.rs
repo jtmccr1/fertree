@@ -267,6 +267,13 @@ impl<R: std::io::Read> NexusImporter<R> {
 
         Ok(ch)
     }
+    fn skip_until(&mut self, c: Byte) -> Result<Byte> {
+        let mut ch: Byte = self.read_byte()?;
+        while ch != c {
+            ch = self.read_byte()?;
+        }
+        Ok(ch)
+    }
 
     fn read_token(&mut self, deliminator: &str) -> Result<String> {
         let delims = deliminator.bytes().collect::<Vec<Byte>>();
@@ -432,7 +439,13 @@ impl<R: std::io::Read> TreeImporter<R> for NexusImporter<R> {
         self.reading_trees && self.last_token.eq_ignore_ascii_case("TREE")
             || self.last_token.eq_ignore_ascii_case("UTREE")
     }
-
+    fn skip_tree(&mut self) {
+        if self.has_tree(){
+            self.skip_until(b';');
+            self.read_token(";");
+            println!("{}", self.last_token);
+        }
+    }
     fn read_next_tree(&mut self) -> Result<MutableTree> {
         if !self.reading_trees {
             self.prep_for_trees()?;
@@ -601,6 +614,33 @@ mod tests {
             tree_ids.push(tree.id.take().unwrap());
         }
         assert_eq!(vec!["tree0", "tree1"], tree_ids)
+    }
+
+    #[test]
+    fn skip(){
+            let nexus = "#NEXUS
+            BEGIN TAXA;
+            DIMENSIONS NTAX=4;
+            TAXLABELS Tip0 Tip1 Tip2 Tip3;
+            END;
+            BEGIN TREES;
+            translate
+            0 Tip0,
+            1 Tip1,
+            2 Tip2,
+            3 Tip3
+            ;
+            TREE tree0 = (0:0.10948830688813957,1:0.08499321350697361,(2:0.17974073029346938,3:0.1702835785780057):0.19361872371858507);
+            TREE tree1 = (0:0.10948830688813957,1:0.08499321350697361,(2:0.17974073029346938,3:0.1702835785780057):0.19361872371858507);
+            END;";
+    
+            let mut trees = NexusImporter::from_reader(nexus.as_bytes());
+            let mut tree_ids = vec![];
+            trees.skip_tree();
+            for mut tree in trees {
+                tree_ids.push(tree.id.take().unwrap());
+            }
+            assert_eq!(vec!["tree1"], tree_ids)
     }
 
     #[test]

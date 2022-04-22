@@ -294,6 +294,12 @@ impl<R: std::io::Read> TreeImporter<R> for NewickImporter<R> {
             Err(e) => panic!("parsing error: {}", e),
         }
     }
+    fn skip_tree(&mut self){
+        if self.has_tree() {
+            self.skip_until(b';') ;
+        }
+       
+    }
     fn read_next_tree(&mut self) -> Result<MutableTree> {
         let start = std::time::Instant::now();
         self.tree = Some(MutableTree::new());
