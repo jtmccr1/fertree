@@ -101,7 +101,6 @@ fn tree<R: std::io::Read, T: TreeImporter<R>>(
 ) -> Result<(), Box<dyn Error>> {
     let stdout = std::io::stdout(); // get the global stdout entity
     let mut handle = stdout.lock(); // acquire a lock on it
-                                    //TODO could skip trees that don't match instead of parsing them all.
     let mut found = false;
 
     if let Some(i) = index {

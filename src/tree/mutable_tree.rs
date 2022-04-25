@@ -9,7 +9,7 @@ pub type TreeIndex = usize;
 
 //TODO think more about missing data. Should these be options? Should they be guaranteed
 //TODO add tree annotation
-//TODO adopt nodeorder 
+//TODO adopt nodeorder
 //TODO hide this public things and get them from the tree
 #[derive(Debug)]
 pub struct MutableTreeNode {
@@ -131,7 +131,20 @@ impl MutableTree {
             .get_root()
             .expect("every tree should have a root at least nominally");
         tree.calc_node_heights();
-        me.tree_helper(tree, root, taxa);
+        me.tree_helper(tree, taxa);
+        me.collapse_degree2_nodes(me.get_root().expect("Tree is not rooted"));
+        me.heights_known = true;
+        me.calculate_branchlengths();
+        me
+    }
+
+    pub fn get_ancestral_tree(tree: &mut MutableTree, taxa: &HashSet<String>) -> Self {
+        let mut me = MutableTree::new();
+        let root = tree
+            .get_root()
+            .expect("every tree should have a root at least nominally");
+        tree.calc_node_heights();
+        me.tree_helper(tree, taxa);
         me.heights_known = true;
         me.calculate_branchlengths();
         me
@@ -139,78 +152,88 @@ impl MutableTree {
 
     pub fn copy_subtree(tree: &MutableTree, node: TreeIndex, taxa: &HashSet<String>) -> Self {
         let mut me = MutableTree::new();
-        me.tree_helper(tree, node, taxa);
+        me.tree_helper(tree, taxa);
         me.heights_known = true;
         trace!("in tree: {}", me.branchlengths_known);
         trace!("in tree: {}", me.heights_known);
         me
     }
-    fn tree_helper(
-        &mut self,
-        tree: &MutableTree,
-        node: TreeIndex,
-        taxa: &HashSet<String>,
-    ) -> Option<TreeIndex> {
-        trace!("call");
-        let mut new_node = None;
-        if tree.get_num_children(node) == 0 {
-            //make external node
-            if let Some(taxon) = &tree.get_unwrapped_node(node).taxon {
-                if (taxa.contains(taxon)) {
-                    new_node = self.make_external_node(taxon, Some(&taxa));
-                    self.set_height(
-                        new_node.expect(&*format!(
-                            "Taxa {}, not found in taxon set {:?}",
-                            &taxon, taxa
-                        )),
-                        tree.get_height(node)
-                            .expect("found a node without a height"),
-                    );
-                    // copy annotations
-                    let annotation_map = &tree.get_unwrapped_node(node).annotations;
-                    for (key, value) in annotation_map.iter() {
-                        self.annotate_node(new_node.unwrap(), key.clone(), value.clone());
-                    }
-                    trace!("made {:?} node with taxa {}", new_node,taxon)
-                }
-            }
-            new_node
-        } else {
-            let nchildren = tree.get_num_children(node);
-            let mut children: Vec<usize> = vec![];
-            let mut visited = 0;
-            while visited < nchildren {
-                let child = tree.get_child(node, visited);
-                if let Some(child_node) = child {
-                    let new_child = self.tree_helper(tree, child_node, taxa);
-                    if let Some(new_child_index) = new_child {
-                        children.push(new_child_index)
-                    }
+
+    fn copy_annotations(&mut self, tree: &MutableTree, their_node: TreeIndex, my_node: TreeIndex) {
+        let annotation_map = &tree.get_unwrapped_node(their_node).annotations;
+        for (key, value) in annotation_map.iter() {
+            self.annotate_node(my_node, key.clone(), value.clone());
+        }
+    }
+    fn tree_helper(&mut self, tree: &MutableTree, taxa: &HashSet<String>){
+        let mut visited_nodes = HashMap::new(); //key: their_node ; value: my node
+                                                // make tips
+        for taxon in taxa {
+            let their_node = tree
+                .get_taxon_node(taxon)
+                .expect(format!("taxa {} not found in input tree", taxon).as_str());
+            let new_node = self.make_external_node(&taxon, None).unwrap();
+            self.set_height(
+                new_node,
+                tree.get_height(their_node).expect("nodes should be known"),
+            );
+            self.copy_annotations(tree, their_node, new_node);
+        }
+        // for each tip get the path to the root
+        for taxon in taxa {
+            let mut their_node = tree
+                .get_taxon_node(taxon)
+                .expect(format!("taxa {} not found in input tree", taxon).as_str());
+            let mut new_node = self.get_taxon_node(taxon).unwrap();
+            while let Some(their_parent) = tree.get_parent(their_node) {
+                if let Some(my_parent) = visited_nodes.get(&their_parent) {
+                    //add new node as child
+                    self.add_child(*my_parent, new_node);
+                    break;
                 } else {
-                    panic!("aaaaah!")
-                }
-                visited += 1;
-            }
-            match children.len().cmp(&1) {
-                Ordering::Less => None,
-                Ordering::Equal => Some(children[0]),
-                Ordering::Greater => {
-                    new_node = Some(self.make_root_node(children));
+                    let new_parent = self.make_internal_node(vec![new_node]);
+                    visited_nodes.insert(their_parent, new_parent);
+
                     self.set_height(
-                        new_node.unwrap(),
-                        tree.get_height(node)
-                            .expect("found a node without a height"),
+                        new_parent,
+                        tree.get_height(their_parent)
+                            .expect("nodes should be known"),
                     );
-                    // copy annotations
-                    let annotation_map = &tree.get_unwrapped_node(node).annotations;
-                    for (key, value) in annotation_map.iter() {
-                        self.annotate_node(new_node.unwrap(), key.clone(), value.clone());
-                    }
-                    new_node
+                    self.copy_annotations(tree, their_parent, new_parent);
+                    new_node = new_parent;
+                    their_node = their_parent;
                 }
             }
         }
+        let their_root = tree.get_root().unwrap();
+
+        self.set_root(Some(*visited_nodes.get(&their_root).unwrap()));
+
+
     }
+    fn collapse_degree2_nodes(&mut self, node: TreeIndex) {
+        self.calc_node_heights();
+
+        let mut i=0;
+        while let Some(child) = self.get_child(node,i){
+            self.collapse_degree2_nodes(child);
+            i+=1;
+        }
+        if self.get_num_children(node)==1{
+            if let Some(parent) = self.get_parent(node){
+                self.remove_child(parent,node);
+            }else{
+                //at the root
+                let child= self.get_child(node, 0).unwrap();
+                self.remove_child(node, child);
+                self.set_root(Some(child));
+            }
+            
+
+        }
+
+    }
+
     pub fn get_height(&self, node: TreeIndex) -> Option<f64> {
         self.get_unwrapped_node(node).height
     }

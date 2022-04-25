@@ -19,17 +19,23 @@ pub enum SubCommands {
         all: bool,
         #[structopt(short, long, help = "number of tips to keep")]
         n: usize,
+        #[structopt(short,long, help = "include all ancestral nodes for original tree")]
+        keep_single_children: bool, 
     },
     /// prune tree to just provided tips
     Keep {
         #[structopt(short, long, parse(from_os_str), help = "text file with taxa to keep")]
         taxon_list: path::PathBuf,
+        #[structopt(short,long, help = "include all ancestral nodes for original tree")]
+        keep_single_children: bool,
     },
 
     /// prune provided tips from tree
     Remove {
         #[structopt(short, long, parse(from_os_str), help = "text file with taxa to keep")]
         taxon_list: path::PathBuf,
+        #[structopt(short,long, help = "include all ancestral nodes for original tree")]
+        keep_single_children: bool,
     },
 }
 
@@ -44,7 +50,7 @@ pub fn run<R: std::io::Read, T: TreeImporter<R>>(
 
     // let mut tree = trees.read_next_tree()?;
     match cmd {
-        SubCommands::Sample { n, ref all } => {
+        SubCommands::Sample { n, ref all , keep_single_children:keepSingleChildren} => {
             while trees.has_tree() {
                 let mut tree = trees.read_next_tree()?;
                 if !all || taxa.is_empty() {
@@ -57,22 +63,26 @@ pub fn run<R: std::io::Read, T: TreeImporter<R>>(
                         .collect();
                 }
                 debug!("{:?}", taxa);
-                let new_tree = MutableTree::from_tree(&mut tree, &taxa);
+                let new_tree = if keepSingleChildren==true {MutableTree::get_ancestral_tree(&mut tree, &taxa)}else{MutableTree::from_tree(&mut tree, &taxa)};
                 writeln!(handle, "{}", new_tree)?;
             }
         }
         SubCommands::Keep {
             taxon_list: taxonList,
+            keep_single_children:keepSingleChildren
         } => {
             let file = BufReader::new(File::open(&taxonList)?);
             taxa = file.lines().map(|x| x.unwrap()).collect();
             while trees.has_tree() {
                 let mut tree = trees.read_next_tree()?;
-                let new_tree = MutableTree::from_tree(&mut tree, &taxa);
+                let new_tree = if keepSingleChildren ==true {MutableTree::get_ancestral_tree(&mut tree, &taxa)} else {MutableTree::from_tree(&mut tree, &taxa)};
                 writeln!(handle, "{}", new_tree)?;
             }
         }
-        SubCommands::Remove { taxon_list: taxonList } => {
+        SubCommands::Remove {
+            taxon_list: taxonList,
+            keep_single_children:keepSingleChildren
+        } => {
             let file = BufReader::new(File::open(&taxonList)?);
             taxa = file.lines().map(|x| x.unwrap()).collect();
             while trees.has_tree() {
@@ -85,7 +95,7 @@ pub fn run<R: std::io::Read, T: TreeImporter<R>>(
                     .collect::<HashSet<String>>();
 
                 taxa_to_keep.retain(|s| taxa.contains(s));
-                let new_tree = MutableTree::from_tree(&mut tree, &taxa_to_keep);
+                let new_tree = if keepSingleChildren {MutableTree::get_ancestral_tree(&mut tree, &taxa_to_keep)} else {MutableTree::from_tree(&mut tree, &taxa_to_keep)};
                 writeln!(handle, "{}", new_tree)?;
             }
         }
