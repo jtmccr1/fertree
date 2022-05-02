@@ -581,6 +581,9 @@ impl MutableTree {
     pub fn get_annotation_keys(&self) -> Keys<'_, String, AnnotationValue> {
         self.annotation_type.keys()
     }
+    pub fn get_annotation_type(&self, name:&str)->Option<&AnnotationValue>{
+        self.annotation_type.get(name)
+    }
     pub fn is_external(&self, node_ref: TreeIndex) -> bool {
         self.get_unwrapped_node(node_ref).first_child.is_none()
     }

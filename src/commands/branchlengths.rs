@@ -1,6 +1,7 @@
 use crate::commands::command_io;
 use rebl::io::parser::tree_importer::TreeImporter;
 use rebl::tree::mutable_tree::MutableTree;
+use rebl::tree::mutable_tree::PreOrderIterator;
 use rebl::tree::AnnotationValue;
 use regex::Regex;
 use std::collections::HashMap;
@@ -60,6 +61,22 @@ pub enum SubCommands {
         default_value = "1"
         )]
         rate: f64,
+    },
+    // Set branchlength from interger or float annotation
+    FromAnnotation{
+        #[structopt(
+            short,
+            long,
+            help = "The annotation used to set the branchlength"
+        )]
+        name:String,
+        #[structopt(
+            short,
+            long,
+            help = "The length to use if the annotation is not found",
+            default_value="0"
+        )]
+        default:f64
     }
 }
 #[derive(Debug, StructOpt)]
@@ -97,7 +114,8 @@ pub fn run<R: std::io::Read, T: TreeImporter<R>>(
                 tree_time(&mut tree, sub_cmd);
             }
             SubCommands::Set { ref file } => from_file(&mut tree, file),
-            SubCommands::Poisson { rate} =>poisson(&mut tree, rate)
+            SubCommands::Poisson { rate} =>poisson(&mut tree, rate),
+            SubCommands::FromAnnotation{ref name, default} =>from_annotation(&mut tree, name, default)
         }
         writeln!(handle, "{}", tree)?;
     }
@@ -201,12 +219,33 @@ fn tree_time(tree: &mut MutableTree, cmd: &TreeTimeSubCommands) {
     }
 }
 
+fn from_annotation(tree: &mut MutableTree, name:&str, default: f64){
+    if let Some(annotation) = tree.get_annotation_type(name){
+        match annotation{
+            AnnotationValue::Continuous(_)=>{
 
+            }
+            _=>{
+                panic!("{} is not a continuous annotation" ,name)
+            }
+        };
+    }else{
+        panic!("Tree does not contain annotation {}" ,name)
+    }
+    
+    for node in PreOrderIterator::new(None,tree){
+        if let Some(AnnotationValue::Continuous(new_length)) = tree.get_annotation(node,name){
+            tree.set_length(node,*new_length);
+        }else{
+            tree.set_length(node,default);
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use crate::commands::branchlengths::{
-        min_length, round, scale, tree_time, TreeTimeSubCommands,
+        min_length, round, scale, tree_time, TreeTimeSubCommands,from_annotation
     };
     use rebl::io::parser::newick_importer::NewickImporter;
     use std::io::BufReader;
@@ -340,5 +379,17 @@ mod tests {
             Some(0.0),
             tree.get_length(tree.get_taxon_node("D").unwrap())
         );
+    }
+    #[test]
+    fn test_annotation() {
+        let s = "((A[&count=1.0]:1.1,B[&count=1.0]:1.1)[&count=1.0]:1.1,'C d'[&count=1.0]:1.1)[&count=1.0];";
+        let mut tree =
+            NewickImporter::read_tree(BufReader::new(s.as_bytes())).expect("error in parsing");
+        from_annotation(&mut tree,"count",10.0);
+        for i in 0..tree.get_node_count() {
+            if i != tree.get_root().unwrap() {
+                assert_eq!(Some(1.0), tree.get_length(i));
+            }
+        }
     }
 }
