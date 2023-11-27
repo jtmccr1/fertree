@@ -46,10 +46,11 @@ fn taxa<R: std::io::Read, T: TreeImporter<R>>(mut trees: T) -> Result<(), Box<dy
         let tree = trees.read_next_tree()?;
         let mut i = 0;
         while i < tree.get_external_node_count() {
-            if let Some(tip) = tree.get_external_node(i) {
-                if let Some(taxa) = &tip.taxon {
+
+            let tip = tree.get_external_node(i); 
+            if let Some(taxa) = tree.get_taxon(tip){
                     writeln!(handle, "{}", taxa)?;
-                }
+            
             }
             i += 1;
         }

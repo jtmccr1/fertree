@@ -1,7 +1,7 @@
 use super::command_io;
 
 use rebl::tree::mutable_tree::MutableTree;
-use rebl::tree::AnnotationValue;
+
 use std::collections::HashMap;
 use std::error::Error;
 use std::io::Write;

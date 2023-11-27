@@ -1,7 +1,12 @@
 use rebl::io::parser::tree_importer::TreeImporter;
+use rebl::tree::mutable_tree::TreeIndex;
+use std::collections::HashMap;
 use std::error::Error;
+use std::hash::Hash;
 use std::io::Write;
 use structopt::StructOpt;
+use bit_set::BitSet;
+
 
 #[derive(Debug, StructOpt)]
 pub enum SubCommands {
@@ -63,6 +68,45 @@ fn nodes<R: std::io::Read, T: TreeImporter<R>>(mut trees: T) -> Result<(), Box<d
         t += 1;
     }
 
+    Ok(())
+}
+
+fn clades <R: std::io::Read, T: TreeImporter<R>>(mut trees: T) -> Result<(), Box<dyn Error>> {
+    let stdout = std::io::stdout(); // get the global stdout entity
+    let mut handle = stdout.lock(); // acquire a lock on it
+    let mut t = 0; //TODO use id if in tree maybe every tree gets an id in parser
+    // get taxa 
+    while trees.has_tree() {
+        let mut tree = trees.read_next_tree()?;
+        let mut taxa_map:HashMap<&str,usize> = HashMap::new();
+        if t==0 {
+            for i in 0..tree.get_external_node_count() {
+                taxa_map.insert(tree.get_taxon(tree.get_external_node(i)).expect("taxon should be set in order to find clades"),i);
+            }
+
+        }
+        let mut clade_map:HashMap<TreeIndex,BitSet> = HashMap::new();
+
+        for node in tree.preorder_iter().rev() {
+            let mut clade = BitSet::new();
+            if tree.is_external(node){
+                let taxon = tree.get_taxon(node).expect("taxon should be set in order to find clades");
+                clade.insert(*taxa_map.get(taxon).expect("taxon should be in taxa map"));
+            }else{
+                for child in tree.get_children(node){
+                    clade.union_with(&clade_map.get(&child).expect("child should be in clade map"));
+
+                }
+            }
+                clade_map.insert(node,clade);
+                writeln!(handle, "{}\t{}", t, clade.into_bit_vec())?;
+            }
+
+            t+=1;
+
+        }
+
+    
     Ok(())
 }
 

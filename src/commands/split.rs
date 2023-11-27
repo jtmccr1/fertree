@@ -1,7 +1,7 @@
 use rebl::io::parser::tree_importer::TreeImporter;
 use rebl::io::writer::newick_writer::write_newick_subtree;
 use rebl::tree::mutable_tree::{MutableTree, TreeIndex};
-use std::collections::HashSet;
+
 use std::error::Error;
 use std::io::Write;
 
@@ -114,7 +114,7 @@ pub fn run<R: std::io::Read, T: TreeImporter<R>>(
         warn!("Because explore is set. No trees will be written");
     }
     while trees.has_tree() {
-        let mut starting_tree = trees.read_next_tree()?;
+        let starting_tree = trees.read_next_tree()?;
         // starting_tree.calc_node_heights();
         trace!("starting to split");
         let mut searcher = SubtreeSearcher {
@@ -156,7 +156,7 @@ pub fn run<R: std::io::Read, T: TreeImporter<R>>(
             }
             // TODO making these trees is much too slow
             if !explore {
-                let mut i = 0;
+                let i = 0;
                 for subtree in searcher.subtrees {
                     debug!("writing tree: {} - {} tips", i, subtree.tips);
                     writeln!(handle, "{}", write_newick_subtree(&searcher.tree, subtree.root))?;

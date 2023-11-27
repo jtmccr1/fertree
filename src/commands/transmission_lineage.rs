@@ -260,7 +260,7 @@ impl LineageFinder {
         let mut new_lag = current_lag;
         while current_lag < self.lag && parent.is_some() && !respects {
             let default_location = AnnotationValue::Discrete("unknown".parse().unwrap());
-            let mut parent_annotation = tree
+            let parent_annotation = tree
                 .get_annotation(parent.unwrap(), &self.key)
                 .unwrap_or(&default_location);
             if parent_annotation != &self.value {

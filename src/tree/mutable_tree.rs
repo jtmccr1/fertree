@@ -1,6 +1,6 @@
 use super::fixed_tree::FixedNode;
 use super::AnnotationValue;
-use std::cmp::Ordering;
+
 use std::collections::hash_map::Keys;
 use std::collections::{HashMap, HashSet};
 use std::option::Option;
@@ -127,7 +127,7 @@ impl MutableTree {
     //TODO refactor to return error for node heights
     pub fn from_tree(tree: &mut MutableTree, taxa: &HashSet<String>) -> Self {
         let mut me = MutableTree::new();
-        let root = tree
+        let _root = tree
             .get_root()
             .expect("every tree should have a root at least nominally");
         tree.calc_node_heights();
@@ -140,7 +140,7 @@ impl MutableTree {
 
     pub fn get_ancestral_tree(tree: &mut MutableTree, taxa: &HashSet<String>) -> Self {
         let mut me = MutableTree::new();
-        let root = tree
+        let _root = tree
             .get_root()
             .expect("every tree should have a root at least nominally");
         tree.calc_node_heights();
@@ -150,7 +150,7 @@ impl MutableTree {
         me
     }
 
-    pub fn copy_subtree(tree: &MutableTree, node: TreeIndex, taxa: &HashSet<String>) -> Self {
+    pub fn copy_subtree(tree: &MutableTree, _node: TreeIndex, taxa: &HashSet<String>) -> Self {
         let mut me = MutableTree::new();
         me.tree_helper(tree, taxa);
         me.heights_known = true;
@@ -520,11 +520,11 @@ impl MutableTree {
         }
         None
     }
-    pub fn get_external_node(&self, index: usize) -> Option<&MutableTreeNode> {
-        self.nodes.get(self.external_nodes[index])
+    pub fn get_external_node(&self, index: usize) -> TreeIndex {
+        self.external_nodes[index]
     }
-    pub fn get_internal_node(&self, index: usize) -> Option<&MutableTreeNode> {
-        self.nodes.get(self.internal_nodes[index])
+    pub fn get_internal_node(&self, index: usize) -> TreeIndex {
+        self.external_nodes[index]
     }
 
     pub fn get_children(&self, node: TreeIndex) -> Vec<TreeIndex> {
@@ -661,6 +661,40 @@ impl MutableTree {
     }
     pub fn get_id(&self) -> Option<&str> {
         self.id.as_deref()
+    }
+    pub fn reroot(&mut self, node:TreeIndex, proportion:f64){
+        let node_height = self.get_height(node).unwrap();
+        let parent = self.get_parent(node).unwrap();
+        let parent_height = self.get_height(parent).unwrap();
+        let length = self.get_length(node).unwrap();
+        let new_length = length * proportion;
+        let new_height = node_height + new_length;
+        let new_parent = self.make_internal_node(vec![node]);
+        self.set_height(new_parent, new_height);
+        self.set_length(node, new_length);
+        self.set_parent(new_parent, node);
+        self.set_parent(new_parent, parent);
+        self.set_length(parent, parent_height - new_height);
+        self.remove_child(parent, node);
+        self.add_child(new_parent, parent);
+        self.set_root(Some(new_parent));
+    }
+
+    pub fn get_mrca(&self, node1: TreeIndex, node2: TreeIndex) -> TreeIndex {
+        let mut node1_ancestors = HashSet::new();
+        let mut node = node1;
+        while let Some(parent) = self.get_parent(node) {
+            node1_ancestors.insert(parent);
+            node = parent;
+        }
+        let mut node = node2;
+        while let Some(parent) = self.get_parent(node) {
+            if node1_ancestors.contains(&parent) {
+                return parent;
+            }
+            node = parent;
+        }
+        panic!("no MRCA found");
     }
 }
 //TODO I don't like that this is not lazy

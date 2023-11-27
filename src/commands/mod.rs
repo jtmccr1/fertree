@@ -8,6 +8,7 @@ pub mod split;
 pub mod stats;
 pub mod transmission_lineage;
 pub mod format;
+pub mod distance;
 
 pub mod command_io {
     use csv::Reader;

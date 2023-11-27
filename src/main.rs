@@ -147,6 +147,11 @@ enum Fertree {
         #[structopt(subcommand)]
         cmd: commands::branchlengths::SubCommands,
     },
+        /// caluculate distances given trees
+    Distance {
+            #[structopt(subcommand)]
+            cmd: Option<commands::distance::SubCommands>,
+        },
 }
 
 #[derive(Debug, StructOpt)]
@@ -220,6 +225,7 @@ fn run_commands<R: std::io::Read, T: TreeImporter<R>>(
     match cmd {
         Fertree::Format { cmd } => commands::format::run(tree_importer, cmd),
         Fertree::Stats { cmd } => commands::stats::run(tree_importer, cmd),
+        Fertree::Distance { cmd } => commands::distance::run(tree_importer, cmd),
         Fertree::Annotate { traits } => commands::annotate::run(tree_importer, traits),
         Fertree::Extract { cmd } => commands::extract::run(tree_importer, cmd),
         Fertree::Clades { cmd } => commands::clades::run(tree_importer, cmd),

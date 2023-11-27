@@ -308,7 +308,7 @@ impl<R: std::io::Read> TreeImporter<R> for NewickImporter<R> {
 
         let root = self.read_internal_node()?;
         if self.last_deliminator == b':' {
-            let length = self.read_double(",():;")?;
+            let _length = self.read_double(",():;")?;
             warn!("Root lengths are ignored");
         }
 
