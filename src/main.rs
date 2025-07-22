@@ -147,6 +147,11 @@ enum Fertree {
         #[structopt(subcommand)]
         cmd: commands::branchlengths::SubCommands,
     },
+    /// annotate nodes with taxon ids assuming an sier model from reMaster.
+    /// Nodes are labeled from the tips until an E type is hit (inclusive)
+    TransmissionChain{
+
+    }
 }
 
 #[derive(Debug, StructOpt)]
@@ -249,5 +254,6 @@ fn run_commands<R: std::io::Read, T: TreeImporter<R>>(
             cutoff,
             lag,
         ),
+        Fertree::TransmissionChain {  }=> commands::transmission_chain::run(tree_importer)
     }
 }
