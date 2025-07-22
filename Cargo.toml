@@ -1,6 +1,6 @@
 [package]
 name = "fertree"
-version = "0.3.6"
+version = "0.3.7"
 authors = ["JT <mccronejt@gmail.com>"]
 edition = "2018"
 

@@ -30,7 +30,7 @@ pub fn run<R:std::io::Read, T:TreeImporter<R>>(
 
 fn annotate_nodes(tree: &mut MutableTree) -> Result<(), Box<dyn std::error::Error>> {
     // TODO: Implement the logic to annotate nodes
-    for i in 0..tree.get_external_node_count()-1 {
+    for i in 0..tree.get_external_node_count(){
         // Your logic here for each external node
         
         let tip =tree.get_external_node(i).unwrap();
@@ -46,7 +46,7 @@ fn annotate_nodes(tree: &mut MutableTree) -> Result<(), Box<dyn std::error::Erro
             if let Some(node_type) = tree.get_annotation(parent, "type") {
                 let node_type_str = node_type.to_string();
                 let re = regex::Regex::new(r"^E").unwrap();
-                if re.is_match(&node_type_str) {
+                if re.is_match(&node_type_str) || tree.get_root()==Some(parent){
                     tree.annotate_node(parent, "id".to_string(), rebl::tree::AnnotationValue::Discrete(taxon.to_string()));
                     break;
                 } else {
