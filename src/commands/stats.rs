@@ -46,7 +46,7 @@ fn general_stats<R: std::io::Read, T: TreeImporter<R>>(mut trees: T) -> Result<(
 fn nodes<R: std::io::Read, T: TreeImporter<R>>(mut trees: T) -> Result<(), Box<dyn Error>> {
     let stdout = std::io::stdout(); // get the global stdout entity
     let mut handle = stdout.lock(); // acquire a lock on it
-    writeln!(handle, "tree\theight\tlength\ttaxa")?;
+    writeln!(handle, "tree\theight\tlength\tchildren\tsiblings\ttaxa")?;
     let mut t = 0; //TODO use id if in tree maybe every tree gets an id in parser
     while trees.has_tree() {
         let mut tree = trees.read_next_tree()?;
@@ -55,10 +55,13 @@ fn nodes<R: std::io::Read, T: TreeImporter<R>>(mut trees: T) -> Result<(), Box<d
             let taxa = tree.get_taxon(i).unwrap_or("");
             let height = tree.get_height(i).expect("Heights should be calculated");
             let mut length = f64::NAN;
+            let mut siblings = f64::NAN;
             if let Some(p) = tree.get_parent(i) {
                 length = tree.get_height(p).expect("Heights should be calculated") - height;
+                siblings = (tree.get_num_children(p) as f64) - 1.0; // don't count me!
             }
-            writeln!(handle, "{}\t{}\t{}\t{}", t, height, length, taxa)?;
+            let children = tree.get_num_children(i);
+            writeln!(handle, "{}\t{}\t{}\t{}\t{}\t{}", t, height, length,children,siblings,taxa)?;
         }
         t += 1;
     }
