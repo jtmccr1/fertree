@@ -17,8 +17,8 @@ pub enum SubCommands {
     Sample {
         #[structopt(short, long, help = "sample same tips from all trees")]
         all: bool,
-        #[structopt(short, long, help = "number of tips to keep")]
-        n: usize,
+        #[structopt(short, long, help = "number of tips to keep. If less than 1 it represents the proportion of tips to keep")]
+        n: f64,
         #[structopt(short,long, help = "include all ancestral nodes for original tree")]
         keep_single_children: bool, 
     },
@@ -51,8 +51,10 @@ pub fn run<R: std::io::Read, T: TreeImporter<R>>(
     // let mut tree = trees.read_next_tree()?;
     match cmd {
         SubCommands::Sample { n, ref all , keep_single_children:keepSingleChildren} => {
+
             while trees.has_tree() {
                 let mut tree = trees.read_next_tree()?;
+                let n = if n > 1.0 { n as usize } else { (n * tree.get_external_node_count() as f64) as usize };
                 if !all || taxa.is_empty() {
                     taxa = tree
                         .external_nodes
