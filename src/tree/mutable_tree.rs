@@ -1,6 +1,6 @@
 use super::fixed_tree::FixedNode;
 use super::AnnotationValue;
-use std::cmp::Ordering;
+use core::f64;
 use std::collections::hash_map::Keys;
 use std::collections::{HashMap, HashSet};
 use std::option::Option;
@@ -131,8 +131,8 @@ impl MutableTree {
             .get_root()
             .expect("every tree should have a root at least nominally");
         tree.calc_node_heights();
-        me.tree_helper(tree, taxa);
-        me.collapse_degree2_nodes(me.get_root().expect("Tree is not rooted"));
+        me.tree_helper(root,tree, taxa,false);
+        // me.collapse_degree2_nodes(me.get_root().expect("Tree is not rooted"));
         me.heights_known = true;
         me.calculate_branchlengths();
         me
@@ -144,7 +144,7 @@ impl MutableTree {
             .get_root()
             .expect("every tree should have a root at least nominally");
         tree.calc_node_heights();
-        me.tree_helper(tree, taxa);
+        me.tree_helper(root,tree, taxa,true);
         me.heights_known = true;
         me.calculate_branchlengths();
         me
@@ -152,7 +152,7 @@ impl MutableTree {
 
     pub fn copy_subtree(tree: &MutableTree, node: TreeIndex, taxa: &HashSet<String>) -> Self {
         let mut me = MutableTree::new();
-        me.tree_helper(tree, taxa);
+        me.tree_helper(node,tree, taxa,true);
         me.heights_known = true;
         trace!("in tree: {}", me.branchlengths_known);
         trace!("in tree: {}", me.heights_known);
@@ -165,52 +165,46 @@ impl MutableTree {
             self.annotate_node(my_node, key.clone(), value.clone());
         }
     }
-    fn tree_helper(&mut self, tree: &MutableTree, taxa: &HashSet<String>){
-        let mut visited_nodes = HashMap::new(); //key: their_node ; value: my node
-                                                // make tips
-        for taxon in taxa {
-            let their_node = tree
-                .get_taxon_node(taxon)
-                .expect(format!("taxa {} not found in input tree", taxon).as_str());
-            let new_node = self.make_external_node(&taxon, None).unwrap();
-            self.set_height(
-                new_node,
-                tree.get_height(their_node).expect("nodes should be known"),
-            );
-            self.copy_annotations(tree, their_node, new_node);
-        }
-        // for each tip get the path to the root
-        for taxon in taxa {
-            let mut their_node = tree
-                .get_taxon_node(taxon)
-                .expect(format!("taxa {} not found in input tree", taxon).as_str());
-            let mut new_node = self.get_taxon_node(taxon).unwrap();
-            while let Some(their_parent) = tree.get_parent(their_node) {
-                if let Some(my_parent) = visited_nodes.get(&their_parent) {
-                    //add new node as child
-                    self.add_child(*my_parent, new_node);
-                    break;
-                } else {
-                    let new_parent = self.make_internal_node(vec![new_node]);
-                    visited_nodes.insert(their_parent, new_parent);
+    fn tree_helper(&mut self, node:TreeIndex,tree: &MutableTree, taxa: &HashSet<String>,keep_degree_2:bool)->Option<TreeIndex>{
+        if tree.is_external(node) {
+            if let Some(taxon) = tree.get_taxon(node) {
+                if taxa.contains(taxon) {
 
+                    let new_node = self.make_external_node(&taxon, None).unwrap();
                     self.set_height(
-                        new_parent,
-                        tree.get_height(their_parent)
-                            .expect("nodes should be known"),
+                        new_node,
+                        tree.get_height(node).expect("nodes should be known"),
                     );
-                    self.copy_annotations(tree, their_parent, new_parent);
-                    new_node = new_parent;
-                    their_node = their_parent;
+                    self.copy_annotations(tree, node, new_node);
+                    return Some(new_node);
                 }
             }
+        }else{
+            let mut included_children =0;
+            let mut child_nodes = vec![];
+            for child in tree.get_children(node){
+
+               if let Some(child_node) =  self.tree_helper(child,tree,taxa,keep_degree_2){
+                    child_nodes.push(child_node);
+                    included_children +=1;
+               }
+            }
+            if included_children>1 || (included_children==1 && keep_degree_2){ // only include bifurcating nodes at least
+                let new_node = self.make_internal_node(child_nodes);
+                self.set_height(
+                    new_node,
+                    tree.get_height(node).expect("nodes should be known"),
+                );
+                self.copy_annotations(tree, node, new_node);
+                self.set_root(Some(new_node));
+                return Some(new_node)
+            }else if included_children==1{
+                return Some(child_nodes[0])
+            }
         }
-        let their_root = tree.get_root().unwrap();
-
-        self.set_root(Some(*visited_nodes.get(&their_root).unwrap()));
-
-
+        return None;
     }
+    
     fn collapse_degree2_nodes(&mut self, node: TreeIndex) {
         self.calc_node_heights();
 
@@ -233,7 +227,12 @@ impl MutableTree {
         }
 
     }
-
+    pub fn is_internal(&self,node:TreeIndex)->bool{
+        self.internal_nodes.contains(&node)
+    }
+    pub fn  is_external(&self,node:TreeIndex)->bool{
+        self.external_nodes.contains(&node)
+    }
     pub fn get_height(&self, node: TreeIndex) -> Option<f64> {
         self.get_unwrapped_node(node).height
     }
@@ -559,6 +558,55 @@ impl MutableTree {
         }
         None
     }
+
+    pub fn get_path_to_root(&self, index:TreeIndex)->Vec<TreeIndex>{
+        let mut path = vec![];
+        let mut node = index;
+
+        while let Some(parent)  = self.get_parent(node){
+            path.push(parent);
+            node = parent;
+        }
+        if let Some(node)= self.get_root(){
+            path.push(node)
+        }else{
+            panic!("The last node in the path to root was not the root!?")
+        }
+        return path;
+    }
+
+    pub fn get_mrca(&self, nodes:Vec<TreeIndex>)->TreeIndex{
+        let mut paths : Vec<HashSet<TreeIndex>>= vec![];
+        for node in nodes{
+            let mut path = HashSet::new();
+            for n in self.get_path_to_root(node){
+                path.insert(n);
+           }
+           paths.push(path)
+        }
+        let mut common_ancestors = paths[0].clone();
+        for path in paths.iter().skip(1) {
+            common_ancestors = common_ancestors.intersection(path).copied().collect();
+        }
+
+        let mut max_height = f64::NEG_INFINITY;
+        let mut mrca: Option<&TreeIndex> = None;
+        for ancestor in common_ancestors.iter(){
+            if let Some(h) = self.get_height(*ancestor){
+                if h > max_height{
+                    max_height = h;
+                    mrca = Some(ancestor);
+                }
+            } else{
+                panic!("Internal error heights must be calculated to get mrca")
+            }
+        }
+        match mrca {
+            Some(ancestor) => *ancestor,
+            None => panic!("Internal error: No MRCA found among the provided nodes"),
+        }
+    }
+
     pub fn set_label(&mut self, index: TreeIndex, label: String) {
         let node = self.get_node_mut(index).expect("node not in tree");
         node.label = Some(label.clone());
@@ -584,9 +632,7 @@ impl MutableTree {
     pub fn get_annotation_type(&self, name:&str)->Option<&AnnotationValue>{
         self.annotation_type.get(name)
     }
-    pub fn is_external(&self, node_ref: TreeIndex) -> bool {
-        self.get_unwrapped_node(node_ref).first_child.is_none()
-    }
+
     pub fn get_root(&self) -> Option<TreeIndex> {
         self.root
     }

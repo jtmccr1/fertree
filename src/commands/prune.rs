@@ -54,7 +54,7 @@ pub fn run<R: std::io::Read, T: TreeImporter<R>>(
 
             while trees.has_tree() {
                 let mut tree = trees.read_next_tree()?;
-                let n = if n > 1.0 { n as usize } else { (n * tree.get_external_node_count() as f64) as usize };
+                let n = if n > 1.0 { n.round() as usize } else { (n * tree.get_external_node_count() as f64).round() as usize };
                 if !all || taxa.is_empty() {
                     taxa = tree
                         .external_nodes

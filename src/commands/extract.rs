@@ -67,28 +67,47 @@ fn taxa<R: std::io::Read, T: TreeImporter<R>>(mut trees: T) -> Result<(), Box<dy
 fn annotations<R: std::io::Read, T: TreeImporter<R>>(mut trees: T) -> Result<(), Box<dyn Error>> {
     let stdout = std::io::stdout(); // get the global stdout entity
     let mut handle = stdout.lock(); // acquire a lock on it
-    while trees.has_tree() {
-        let tree = trees.read_next_tree()?;
-        let header = tree
-            .annotation_type
-            .keys()
-            .cloned()
-            .collect::<Vec<String>>()
-            .join("\t");
-        writeln!(handle, "taxa\t{}", header)?;
-        for node_ref in tree.external_nodes.iter() {
-            let annotation_string = tree
-                .annotation_type
-                .keys()
+    let mut i =0;
+    
+    //get annotation keys from first tree
+    let tree = trees.read_next_tree()?;
+    let annotations = tree
+        .annotation_type
+        .keys()
+        .cloned()
+        .collect::<Vec<String>>();
+    let header = annotations.join("\t");
+
+     writeln!(handle, "tree\ttaxa\t{}", header)?;
+        // process first tree
+      for node_ref in tree.external_nodes.iter() {
+            let annotation_string = annotations.iter()
                 .map(|k| annotation_value_string(tree.get_annotation(*node_ref, k)))
                 .collect::<Vec<String>>()
                 .join("\t");
             if let Some(taxa) = tree.get_taxon(*node_ref) {
-                writeln!(handle, "{}\t{}", taxa, annotation_string)?;
+                writeln!(handle, "{}\t{}\t{}", i, taxa, annotation_string)?;
             } else {
-                writeln!(handle, "\t{}", annotation_string)?;
+                writeln!(handle, "{}\t\t{}", i,annotation_string)?;
             }
         }
+        i+=1;
+
+
+    while trees.has_tree() {
+        let tree = trees.read_next_tree()?;
+        for node_ref in tree.external_nodes.iter() {
+            let annotation_string = annotations.iter()
+                .map(|k| annotation_value_string(tree.get_annotation(*node_ref, k)))
+                .collect::<Vec<String>>()
+                .join("\t");
+            if let Some(taxa) = tree.get_taxon(*node_ref) {
+                writeln!(handle, "{}\t{}\t{}", i, taxa, annotation_string)?;
+            } else {
+                writeln!(handle, "{}\t\t{}", i,annotation_string)?;
+            }
+        }
+        i+=1;
     }
     Ok(())
 }
